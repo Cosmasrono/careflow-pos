@@ -63,6 +63,7 @@ model User {
   username     String   @unique
   name         String
   passwordHash String
+  pinHash      String?
   role         String // admin | receptionist | nurse | doctor | lab | radiology | pharmacist
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())

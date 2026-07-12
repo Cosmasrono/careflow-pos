@@ -25,7 +25,7 @@ function BrandMark({ size = "md" }: { size?: "sm" | "md" }) {
   return (
     <span
       className={cn(
-        "grid place-items-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-white shadow-inner shadow-white/20",
+        "grid place-items-center rounded-xl bg-linear-to-br from-teal-500 to-teal-700 text-white shadow-inner shadow-white/20",
         size === "md" ? "h-9 w-9 text-lg" : "h-8 w-8 text-base",
       )}
     >
@@ -52,8 +52,8 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-[#f3f8f7] text-zinc-900">
-      <aside className="hidden w-64 shrink-0 flex-col bg-gradient-to-b from-teal-950 to-teal-900 p-4 text-teal-50 sm:flex">
-        <div className="mb-6 flex items-center gap-2.5 px-2">
+      <aside className="hidden w-60 shrink-0 flex-col bg-linear-to-b from-teal-950 to-teal-900 p-3.5 text-teal-50 sm:flex">
+        <div className="mb-4 flex items-center gap-2.5 px-2">
           <BrandMark />
           <div>
             <p className="font-display text-base font-semibold leading-tight text-white">
@@ -95,7 +95,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar */}
-        <header className="flex items-center justify-between bg-teal-950 px-4 py-3 text-white sm:hidden">
+        <header className="flex items-center justify-between bg-teal-950 px-4 py-2.5 text-white sm:hidden">
           <div className="flex items-center gap-2">
             <BrandMark size="sm" />
             <span className="font-display font-semibold">CareFlow</span>
@@ -107,7 +107,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Sign out
           </button>
         </header>
-        <nav className="flex gap-1 overflow-x-auto bg-teal-950 px-2 pb-2 sm:hidden">
+        <nav className="flex gap-1 overflow-x-auto bg-teal-950 px-2 pb-1.5 sm:hidden">
           {nav.map((item) => {
             const active =
               item.href === "/"
@@ -138,10 +138,10 @@ export function AppShell({ children }: { children: ReactNode }) {
                 className="absolute inset-0 bg-cover bg-center"
                 style={{ backgroundImage: `url(${bg})` }}
               />
-              <div className="absolute inset-0 bg-[#f3f8f7]/[0.93] backdrop-blur-[2px]" />
+              <div className="absolute inset-0 bg-[#f3f8f7]/93 backdrop-blur-[2px]" />
             </>
           )}
-          <div className="relative mx-auto w-full max-w-5xl p-4 sm:p-8">
+          <div className="relative mx-auto w-full max-w-6xl p-3 sm:p-6">
             {children}
           </div>
         </main>
@@ -160,6 +160,7 @@ function UserBox({
   onLogout: () => void;
 }) {
   return (
+    
     <div className="mt-2 rounded-xl bg-white/5 p-3 ring-1 ring-inset ring-white/10">
       <p className="px-1 text-sm font-medium text-white">{name}</p>
       <p className="px-1 text-xs text-teal-300/80">{roleLabel}</p>

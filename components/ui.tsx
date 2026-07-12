@@ -54,7 +54,7 @@ export function Card({
   return (
     <div
       className={cn(
-        "rounded-2xl border border-teal-950/[0.07] bg-white p-5 shadow-[0_1px_2px_rgb(4_47_43/0.04),0_12px_32px_-16px_rgb(4_47_43/0.16)]",
+        "rounded-2xl border border-teal-950/[0.07] bg-white p-4 shadow-[0_1px_2px_rgb(4_47_43/0.04),0_10px_26px_-16px_rgb(4_47_43/0.16)]",
         className,
       )}
     >
@@ -91,12 +91,12 @@ export function PageHeader({
   action?: ReactNode;
 }) {
   return (
-    <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
+    <div className="mb-4 flex flex-wrap items-end justify-between gap-2.5">
       <div>
-        <h1 className="font-display text-3xl font-semibold tracking-tight text-teal-950">
+        <h1 className="font-display text-[1.8rem] font-semibold tracking-tight text-teal-950 sm:text-[2rem]">
           {title}
         </h1>
-        {subtitle && <p className="mt-1.5 text-sm text-zinc-500">{subtitle}</p>}
+        {subtitle && <p className="mt-1 text-sm text-zinc-500">{subtitle}</p>}
       </div>
       {action}
     </div>

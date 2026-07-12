@@ -57,7 +57,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-20 border-b border-teal-950/5 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-lg text-white shadow-inner shadow-white/20">
+            <span className="grid h-9 w-9 place-items-center rounded-xl bg-linear-to-br from-teal-500 to-teal-700 text-lg text-white shadow-inner shadow-white/20">
               ✚
             </span>
             <div>
@@ -93,7 +93,7 @@ export default function LandingPage() {
           aria-hidden
           className="absolute inset-0 bg-[radial-gradient(60rem_30rem_at_80%_-10%,#ccfbf1_0%,transparent_60%)]"
         />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:py-20">
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 lg:grid-cols-2 lg:py-14">
           <div>
             <p className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-800 ring-1 ring-inset ring-teal-600/20">
               <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
@@ -165,7 +165,7 @@ export default function LandingPage() {
 
       {/* Services */}
       <section id="services" className="border-t border-teal-950/5 bg-[#f3f8f7]">
-        <div className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
+        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
           <h2 className="font-display text-3xl font-semibold tracking-tight text-teal-950 sm:text-4xl">
             Everything under one roof
           </h2>
@@ -203,7 +203,7 @@ export default function LandingPage() {
       </section>
 
       {/* Visit flow */}
-      <section id="visit" className="mx-auto max-w-6xl px-4 py-14 sm:px-6">
+      <section id="visit" className="mx-auto max-w-6xl px-4 py-10 sm:px-6">
         <h2 className="font-display text-3xl font-semibold tracking-tight text-teal-950 sm:text-4xl">
           Your visit, step by step
         </h2>
@@ -213,7 +213,7 @@ export default function LandingPage() {
               key={f.step}
               className="rounded-2xl border border-teal-950/[0.07] bg-white p-5 shadow-[0_1px_2px_rgb(4_47_43/0.04),0_12px_32px_-16px_rgb(4_47_43/0.16)]"
             >
-              <span className="grid h-10 w-10 place-items-center rounded-full bg-gradient-to-br from-teal-500 to-teal-700 font-display text-sm font-semibold text-white shadow-inner shadow-white/20">
+              <span className="grid h-10 w-10 place-items-center rounded-full bg-linear-to-br from-teal-500 to-teal-700 font-display text-sm font-semibold text-white shadow-inner shadow-white/20">
                 {f.step}
               </span>
               <h3 className="mt-4 font-display text-lg font-semibold text-teal-950">
@@ -228,7 +228,7 @@ export default function LandingPage() {
       {/* Contact / CTA */}
       <section
         id="contact"
-        className="border-t border-teal-950/5 bg-gradient-to-br from-teal-800 to-teal-950"
+        className="border-t border-teal-950/5 bg-linear-to-br from-teal-800 to-teal-950"
       >
         <div className="mx-auto flex max-w-6xl flex-col items-start gap-6 px-4 py-12 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
           <div>

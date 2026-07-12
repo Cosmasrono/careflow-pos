@@ -39,10 +39,10 @@ export default function LoginPage() {
         sizes="100vw"
         className="object-cover"
       />
-      <div className="absolute inset-0 bg-gradient-to-br from-teal-950/85 via-teal-950/70 to-teal-900/60" />
-      <div className="relative w-full max-w-sm rounded-3xl border border-white/20 bg-white/95 p-8 shadow-2xl shadow-teal-950/40 backdrop-blur">
+      <div className="absolute inset-0 bg-linear-to-br from-teal-950/85 via-teal-950/70 to-teal-900/60" />
+      <div className="relative w-full max-w-sm rounded-3xl border border-white/20 bg-white/95 p-6 shadow-2xl shadow-teal-950/40 backdrop-blur">
         <div className="mb-6 flex items-center gap-2.5">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-gradient-to-br from-teal-500 to-teal-700 text-lg text-white shadow-inner shadow-white/20">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-linear-to-br from-teal-500 to-teal-700 text-lg text-white shadow-inner shadow-white/20">
             ✚
           </span>
           <div>

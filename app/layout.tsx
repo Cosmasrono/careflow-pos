@@ -3,6 +3,7 @@ import { Fraunces, Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppShell } from "@/components/AppShell";
 import { SessionProvider } from "@/components/SessionProvider";
+import { SessionLockGate } from "@/components/SessionLockGate";
 import { Toaster } from "@/components/Toaster";
 import { getSession } from "@/lib/auth/session";
 
@@ -42,6 +43,7 @@ export default async function RootLayout({
       <body className="min-h-full flex flex-col">
         <SessionProvider value={session}>
           <AppShell>{children}</AppShell>
+          <SessionLockGate />
           <Toaster />
         </SessionProvider>
       </body>

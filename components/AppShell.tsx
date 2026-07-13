@@ -2,10 +2,11 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { cn } from "./ui";
 import { useSession } from "./SessionProvider";
 import { navForRole, ROLE_LABELS } from "@/lib/auth/roles";
+import { PageLoadGate } from "./PageLoadGate";
 
 const PAGE_BG: { prefix: string; img: string }[] = [
   { prefix: "/dashboard", img: "/images/ward.jpg" },
@@ -51,6 +52,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   }
 
   return (
+    <PageLoadGate key={pathname}>
     <div className="flex min-h-screen bg-[#f3f8f7] text-zinc-900">
       <aside className="hidden w-60 shrink-0 flex-col bg-linear-to-b from-teal-950 to-teal-900 p-3.5 text-teal-50 sm:flex">
         <div className="mb-4 flex items-center gap-2.5 px-2">
@@ -147,6 +149,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
     </div>
+    </PageLoadGate>
   );
 }
 
@@ -159,11 +162,114 @@ function UserBox({
   roleLabel: string;
   onLogout: () => void;
 }) {
+  const [openPin, setOpenPin] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+
+  async function savePin() {
+    if (!/^\d{4}$/.test(pin)) {
+      setMessage("PIN must be exactly 4 digits.");
+      return;
+    }
+    if (pin !== confirmPin) {
+      setMessage("PINs do not match.");
+      return;
+    }
+    if (!currentPassword) {
+      setMessage("Enter your current password.");
+      return;
+    }
+
+    setSaving(true);
+    setMessage(null);
+    try {
+      const res = await fetch("/api/auth/pin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mode: "set",
+          currentPassword,
+          pin,
+        }),
+      });
+
+      if (!res.ok) {
+        const body = (await res.json().catch(() => ({}))) as { error?: string };
+        setMessage(body.error ?? "Could not save PIN.");
+        return;
+      }
+
+      setMessage("PIN saved successfully.");
+      setCurrentPassword("");
+      setPin("");
+      setConfirmPin("");
+      setOpenPin(false);
+    } catch {
+      setMessage("Network error. Try again.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
-    
     <div className="mt-2 rounded-xl bg-white/5 p-3 ring-1 ring-inset ring-white/10">
       <p className="px-1 text-sm font-medium text-white">{name}</p>
       <p className="px-1 text-xs text-teal-300/80">{roleLabel}</p>
+      <button
+        onClick={() => {
+          setOpenPin((v) => !v);
+          setMessage(null);
+        }}
+        className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-sm font-medium text-teal-200/75 transition-colors hover:bg-white/5 hover:text-white"
+      >
+        Set 4-digit PIN
+      </button>
+
+      {openPin && (
+        <div className="mt-2 space-y-2 rounded-lg bg-white/5 p-2 ring-1 ring-inset ring-white/10">
+          <input
+            className="h-9 w-full rounded-md border border-white/20 bg-white/10 px-2 text-xs text-white placeholder:text-teal-200/60 focus:outline-none"
+            type="password"
+            placeholder="Current password"
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+            autoComplete="current-password"
+          />
+          <input
+            className="h-9 w-full rounded-md border border-white/20 bg-white/10 px-2 text-center text-xs tracking-[0.3em] text-white placeholder:text-teal-200/60 focus:outline-none"
+            placeholder="New PIN"
+            inputMode="numeric"
+            value={pin}
+            onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+          />
+          <input
+            className="h-9 w-full rounded-md border border-white/20 bg-white/10 px-2 text-center text-xs tracking-[0.3em] text-white placeholder:text-teal-200/60 focus:outline-none"
+            placeholder="Confirm PIN"
+            inputMode="numeric"
+            value={confirmPin}
+            onChange={(e) =>
+              setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))
+            }
+          />
+          <button
+            onClick={savePin}
+            disabled={saving}
+            className="w-full rounded-md bg-teal-600 px-2 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-teal-500 disabled:opacity-50"
+          >
+            {saving ? "Saving..." : "Save PIN"}
+          </button>
+        </div>
+      )}
+
+      {message && (
+        <p className="mt-2 rounded-md bg-white/10 px-2 py-1.5 text-xs text-teal-100">
+          {message}
+        </p>
+      )}
+
       <button
         onClick={onLogout}
         className="mt-2 w-full rounded-lg px-2 py-1.5 text-left text-sm font-medium text-teal-200/75 transition-colors hover:bg-white/5 hover:text-white"

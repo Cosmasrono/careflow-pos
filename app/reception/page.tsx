@@ -174,7 +174,6 @@ function CheckInTab({ onGoToTriage }: { onGoToTriage: () => void }) {
   const data = useClinic();
   const [query, setQuery] = useState("");
   const [registering, setRegistering] = useState(false);
-  const [success, setSuccess] = useState<string | null>(null);
 
   const q = query.trim().toLowerCase();
 
@@ -193,9 +192,11 @@ function CheckInTab({ onGoToTriage }: { onGoToTriage: () => void }) {
   );
 
   const handleCheckedIn = (name: string) => {
+    void name;
     setQuery("");
     setRegistering(false);
-    setSuccess(`${name} is checked in — take their vitals in the Triage tab.`);
+    // Auto-route reception straight to triage after check-in.
+    onGoToTriage();
   };
 
   return (
@@ -208,20 +209,10 @@ function CheckInTab({ onGoToTriage }: { onGoToTriage: () => void }) {
           onChange={(e) => {
             setQuery(e.target.value);
             setRegistering(false);
-            setSuccess(null);
           }}
           autoFocus
         />
       </Field>
-
-      {success && (
-        <div className="mt-3 flex items-center justify-between gap-3 rounded-lg border border-green-200 bg-green-50 p-3 text-sm text-green-800">
-          <p>✓ {success}</p>
-          <Button size="sm" variant="secondary" onClick={onGoToTriage}>
-            Open triage →
-          </Button>
-        </div>
-      )}
 
       {/* Results */}
       {q && !registering && (
@@ -265,7 +256,7 @@ function CheckInTab({ onGoToTriage }: { onGoToTriage: () => void }) {
         />
       )}
 
-      {!q && !success && (
+      {!q && (
         <p className="mt-4 text-sm text-zinc-400">
           Start typing to find a patient, or enter a new national ID to
           register one.

@@ -10,6 +10,34 @@ function validPin(pin: string): boolean {
   return /^\d{4}$/.test(pin);
 }
 
+async function getUserPinHash(userId: string): Promise<string | null> {
+  const result = await prisma.$runCommandRaw<{
+    cursor?: { firstBatch?: Array<{ pinHash?: string | null }> };
+  }>({
+    find: "User",
+    filter: { _id: { $oid: userId } },
+    projection: { pinHash: 1 },
+    limit: 1,
+  });
+
+  const row = result.cursor?.firstBatch?.[0];
+  return typeof row?.pinHash === "string" ? row.pinHash : null;
+}
+
+async function setUserPinHash(userId: string, pinHash: string): Promise<void> {
+  await prisma.$runCommandRaw({
+    update: "User",
+    updates: [
+      {
+        q: { _id: { $oid: userId } },
+        u: { $set: { pinHash } },
+        upsert: false,
+        multi: false,
+      },
+    ],
+  });
+}
+
 export async function POST(req: Request) {
   try {
     const session = await getSession();
@@ -35,7 +63,7 @@ export async function POST(req: Request) {
 
     const user = await prisma.user.findUnique({
       where: { id: session.id },
-      select: { id: true, passwordHash: true, pinHash: true, active: true },
+      select: { id: true, passwordHash: true, active: true },
     });
 
     if (!user || !user.active) {
@@ -52,21 +80,19 @@ export async function POST(req: Request) {
         );
       }
 
-      await prisma.user.update({
-        where: { id: user.id },
-        data: { pinHash: await hashPassword(pin) },
-      });
+      await setUserPinHash(user.id, await hashPassword(pin));
       return NextResponse.json({ ok: true, hasPin: true });
     }
 
-    if (!user.pinHash) {
+    const pinHash = await getUserPinHash(user.id);
+    if (!pinHash) {
       return NextResponse.json(
         { error: "PIN is not set for this account.", code: "PIN_NOT_SET" },
         { status: 428 },
       );
     }
 
-    const ok = await verifyPassword(pin, user.pinHash);
+    const ok = await verifyPassword(pin, pinHash);
     if (!ok) {
       return NextResponse.json({ error: "Incorrect PIN." }, { status: 403 });
     }
@@ -74,6 +100,16 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true, hasPin: true });
   } catch (err) {
     console.error("POST /api/auth/pin failed", err);
+    const msg = err instanceof Error ? err.message : "";
+    if (/pinHash|Unknown arg|Unknown field/i.test(msg)) {
+      return NextResponse.json(
+        {
+          error:
+            "PIN setup not ready on server. Run: pnpm prisma generate --no-engine",
+        },
+        { status: 500 },
+      );
+    }
     return NextResponse.json({ error: "PIN action failed." }, { status: 500 });
   }
 }

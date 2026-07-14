@@ -11,14 +11,12 @@ function validPin(pin: string): boolean {
 }
 
 async function getUserPinHash(userId: string): Promise<string | null> {
-  const result = await prisma.$runCommandRaw<{
-    cursor?: { firstBatch?: Array<{ pinHash?: string | null }> };
-  }>({
+  const result = (await prisma.$runCommandRaw({
     find: "User",
     filter: { _id: { $oid: userId } },
     projection: { pinHash: 1 },
     limit: 1,
-  });
+  })) as { cursor?: { firstBatch?: Array<{ pinHash?: string | null }> } };
 
   const row = result.cursor?.firstBatch?.[0];
   return typeof row?.pinHash === "string" ? row.pinHash : null;
@@ -104,8 +102,7 @@ export async function POST(req: Request) {
     if (/pinHash|Unknown arg|Unknown field/i.test(msg)) {
       return NextResponse.json(
         {
-          error:
-            "PIN setup not ready on server. Run: pnpm prisma generate --no-engine",
+          error: "PIN setup not ready on server. Run: pnpm prisma generate",
         },
         { status: 500 },
       );

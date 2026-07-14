@@ -1,5 +1,6 @@
 
 
+import { createHash, randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/auth/roles";
 import { hashPassword } from "@/lib/auth/password";
@@ -318,6 +319,7 @@ export async function assignVisitDoctor(input: { visitId: ID; doctorId: ID }) {
 export interface StaffUser {
   id: ID;
   username: string;
+  email: string | null;
   name: string;
   role: Role;
   active: boolean;
@@ -328,11 +330,26 @@ function mapUser(u: UserRow): StaffUser {
   return {
     id: u.id,
     username: u.username,
+    email: u.email,
     name: u.name,
     role: u.role as Role,
     active: u.active,
     createdAt: u.createdAt.toISOString(),
   };
+}
+
+/** Normalises an email for storage/lookup; returns null when blank. */
+function cleanEmail(raw: string | undefined | null): string | null {
+  const email = String(raw ?? "")
+    .trim()
+    .toLowerCase();
+  return email || null;
+}
+
+/** True when another user already owns this email (schema can't enforce it). */
+async function emailTaken(email: string, exceptId?: ID): Promise<boolean> {
+  const owner = await prisma.user.findFirst({ where: { email } });
+  return Boolean(owner && owner.id !== exceptId);
 }
 
 export async function userCount(): Promise<number> {
@@ -371,6 +388,7 @@ export async function listUsers(): Promise<StaffUser[]> {
 
 export async function createUser(input: {
   username: string;
+  email?: string;
   name: string;
   role: Role;
   password: string;
@@ -382,9 +400,15 @@ export async function createUser(input: {
   const existing = await prisma.user.findUnique({ where: { username } });
   if (existing) return { error: "That username is already taken." };
 
+  const email = cleanEmail(input.email);
+  if (email && (await emailTaken(email))) {
+    return { error: "That email is already used by another account." };
+  }
+
   const user = await prisma.user.create({
     data: {
       username,
+      email,
       name: input.name.trim(),
       role: input.role,
       passwordHash: await hashPassword(input.password),
@@ -399,17 +423,87 @@ export async function updateUser(input: {
   role?: Role;
   active?: boolean;
   password?: string;
+  email?: string;
 }): Promise<{ error: string } | { user: StaffUser }> {
   const data: {
     role?: string;
     active?: boolean;
     passwordHash?: string;
+    email?: string | null;
   } = {};
   if (input.role) data.role = input.role;
   if (typeof input.active === "boolean") data.active = input.active;
   if (input.password) data.passwordHash = await hashPassword(input.password);
+  if (input.email !== undefined) {
+    const email = cleanEmail(input.email);
+    if (email && (await emailTaken(email, input.id))) {
+      return { error: "That email is already used by another account." };
+    }
+    data.email = email;
+  }
   const user = await prisma.user.update({ where: { id: input.id }, data });
   return { user: mapUser(user) };
+}
+
+// --- password reset ----------------------------------------------------------
+
+const RESET_TTL_MS = 30 * 60 * 1000; // links live for 30 minutes
+
+function hashToken(token: string): string {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+/**
+ * Starts a reset for the account with this email. Returns the plaintext token
+ * (for the emailed link) plus the recipient, or null when no active account
+ * matches — callers respond identically either way so the endpoint can't be
+ * used to probe which emails exist.
+ */
+export async function createPasswordReset(
+  rawEmail: string,
+): Promise<{ token: string; to: string; name: string } | null> {
+  const email = cleanEmail(rawEmail);
+  if (!email) return null;
+  const user = await prisma.user.findFirst({ where: { email, active: true } });
+  if (!user) return null;
+
+  // A new request supersedes any outstanding links.
+  await prisma.passwordReset.deleteMany({ where: { userId: user.id } });
+
+  const token = randomBytes(32).toString("base64url");
+  await prisma.passwordReset.create({
+    data: {
+      userId: user.id,
+      tokenHash: hashToken(token),
+      expiresAt: new Date(Date.now() + RESET_TTL_MS),
+    },
+  });
+  return { token, to: email, name: user.name };
+}
+
+/** Consumes a reset token and sets the new password. */
+export async function resetPasswordWithToken(
+  token: string,
+  password: string,
+): Promise<{ error: string } | { username: string }> {
+  if (!password || password.length < 6) {
+    return { error: "Password must be at least 6 characters." };
+  }
+  const reset = await prisma.passwordReset.findUnique({
+    where: { tokenHash: hashToken(String(token ?? "")) },
+  });
+  if (!reset || reset.usedAt || reset.expiresAt < new Date()) {
+    return { error: "This reset link is invalid or has expired. Request a new one." };
+  }
+  const user = await prisma.user.update({
+    where: { id: reset.userId },
+    data: { passwordHash: await hashPassword(password) },
+  });
+  await prisma.passwordReset.update({
+    where: { id: reset.id },
+    data: { usedAt: new Date() },
+  });
+  return { username: user.username };
 }
 
 // --- medicine catalog (admin) -----------------------------------------------

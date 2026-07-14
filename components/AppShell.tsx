@@ -1,12 +1,12 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import { useState, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { useState, useTransition, type ReactNode } from "react";
 import { cn } from "./ui";
 import { useSession } from "./SessionProvider";
 import { navForRole, ROLE_LABELS } from "@/lib/auth/roles";
-import { PageLoadGate } from "./PageLoadGate";
+import { RouteLoadingOverlay } from "./PageLoadGate";
 
 const PAGE_BG: { prefix: string; img: string }[] = [
   { prefix: "/dashboard", img: "/images/ward.jpg" },
@@ -37,6 +37,8 @@ function BrandMark({ size = "md" }: { size?: "sm" | "md" }) {
 
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [navigating, startNavigation] = useTransition();
   const session = useSession();
 
   if (pathname === "/" || pathname === "/login" || !session) {
@@ -46,13 +48,25 @@ export function AppShell({ children }: { children: ReactNode }) {
   const nav = navForRole(session.role);
   const bg = backgroundFor(pathname);
 
+  // Push inside a transition so `navigating` stays true exactly as long as
+  // the next route takes to render — that drives the loading overlay.
+  function navigate(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
+    if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) {
+      return; // let the browser handle new-tab/window clicks
+    }
+    e.preventDefault();
+    if (href === pathname) return;
+    startNavigation(() => router.push(href));
+  }
+
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
     window.location.href = "/login";
   }
 
   return (
-    <PageLoadGate key={pathname}>
+    <>
+    {navigating && <RouteLoadingOverlay />}
     <div className="flex min-h-screen bg-[#f3f8f7] text-zinc-900">
       <aside className="hidden w-60 shrink-0 flex-col bg-linear-to-b from-teal-950 to-teal-900 p-3.5 text-teal-50 sm:flex">
         <div className="mb-4 flex items-center gap-2.5 px-2">
@@ -74,6 +88,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={(e) => navigate(e, item.href)}
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
                   active
@@ -119,6 +134,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <Link
                 key={item.href}
                 href={item.href}
+                onClick={(e) => navigate(e, item.href)}
                 className={cn(
                   "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium",
                   active
@@ -149,7 +165,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
     </div>
-    </PageLoadGate>
+    </>
   );
 }
 

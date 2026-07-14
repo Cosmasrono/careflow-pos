@@ -7,6 +7,7 @@ import {
   EmptyState,
   Field,
   PageHeader,
+  Spinner,
   inputClass,
 } from "@/components/ui";
 import { ROLES, ROLE_LABELS, type Role } from "@/lib/auth/roles";
@@ -15,6 +16,7 @@ import { notify } from "@/lib/toast";
 interface StaffUser {
   id: string;
   username: string;
+  email: string | null;
   name: string;
   role: Role;
   active: boolean;
@@ -23,6 +25,7 @@ interface StaffUser {
 const emptyForm = {
   name: "",
   username: "",
+  email: "",
   role: "receptionist" as Role,
   password: "",
 };
@@ -88,6 +91,14 @@ export default function UsersPage() {
     if (pw) patch(id, { password: pw } as Partial<StaffUser>);
   };
 
+  const editEmail = async (u: StaffUser) => {
+    const email = prompt(
+      "Email for password-reset links (leave empty to remove):",
+      u.email ?? "",
+    );
+    if (email !== null) patch(u.id, { email });
+  };
+
   return (
     <div>
       <PageHeader
@@ -99,7 +110,11 @@ export default function UsersPage() {
         {/* Roster */}
         <div>
           {loading ? (
-            <EmptyState>Loading…</EmptyState>
+            <EmptyState>
+              <span className="inline-flex items-center gap-2">
+                <Spinner /> Loading…
+              </span>
+            </EmptyState>
           ) : users.length === 0 ? (
             <EmptyState>No users yet.</EmptyState>
           ) : (
@@ -109,6 +124,7 @@ export default function UsersPage() {
                   <tr>
                     <th className="px-4 py-2 font-medium">Name</th>
                     <th className="px-4 py-2 font-medium">Username</th>
+                    <th className="px-4 py-2 font-medium">Email</th>
                     <th className="px-4 py-2 font-medium">Role</th>
                     <th className="px-4 py-2 font-medium">Status</th>
                     <th className="px-4 py-2" />
@@ -120,6 +136,16 @@ export default function UsersPage() {
                       <td className="px-4 py-2 font-medium">{u.name}</td>
                       <td className="px-4 py-2 font-mono text-xs">
                         {u.username}
+                      </td>
+                      <td className="px-4 py-2">
+                        <button
+                          type="button"
+                          onClick={() => editEmail(u)}
+                          className="text-left text-xs text-teal-700 hover:underline"
+                          title="Edit email"
+                        >
+                          {u.email ?? <span className="text-zinc-400">Set email</span>}
+                        </button>
                       </td>
                       <td className="px-4 py-2">
                         <select
@@ -194,6 +220,15 @@ export default function UsersPage() {
                 onChange={set("username")}
                 placeholder="e.g. reception1"
                 required
+              />
+            </Field>
+            <Field label="Email (for password resets)">
+              <input
+                className={inputClass}
+                type="email"
+                value={form.email}
+                onChange={set("email")}
+                placeholder="optional"
               />
             </Field>
             <Field label="Role">

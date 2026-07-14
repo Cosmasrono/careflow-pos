@@ -10,6 +10,7 @@ import {
   EmptyState,
   Field,
   PageHeader,
+  Spinner,
   cn,
   inputClass,
 } from "@/components/ui";
@@ -158,7 +159,11 @@ export default function ActivityPage() {
                 {pendingOthers.length > 0 && ` (${pendingOthers.length})`}
               </h2>
               {loading ? (
-                <EmptyState>Loading…</EmptyState>
+                <EmptyState>
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner /> Loading…
+                  </span>
+                </EmptyState>
               ) : pendingOthers.length === 0 ? (
                 <EmptyState>No requests waiting for a decision.</EmptyState>
               ) : (
@@ -178,7 +183,11 @@ export default function ActivityPage() {
               {isAdmin ? "All activity" : "My requests"}
             </h2>
             {loading ? (
-              <EmptyState>Loading…</EmptyState>
+              <EmptyState>
+                <span className="inline-flex items-center gap-2">
+                  <Spinner /> Loading…
+                </span>
+              </EmptyState>
             ) : (isAdmin ? requests : mine).length === 0 ? (
               <EmptyState>
                 Nothing yet — file your first request on the right.
@@ -515,6 +524,7 @@ function RequestForm({
         )}
 
         <Button type="submit" disabled={busy}>
+          {busy && <Spinner />}
           {busy ? "Sending…" : "Send for approval"}
         </Button>
       </form>

@@ -61,12 +61,27 @@ type SaleItem {
 model User {
   id           String   @id @default(auto()) @map("_id") @db.ObjectId
   username     String   @unique
+  // Where password-reset links are sent. Optional (not every staff member has
+  // one); uniqueness is enforced in the repo because MongoDB unique indexes
+  // treat missing fields as null and would reject a second email-less user.
+  email        String?
   name         String
   passwordHash String
   pinHash      String?
   role         String // admin | receptionist | nurse | doctor | lab | radiology | pharmacist
   active       Boolean  @default(true)
   createdAt    DateTime @default(now())
+}
+
+// A single-use password-reset link. We store only the SHA-256 of the token;
+// the plaintext token exists solely in the emailed link.
+model PasswordReset {
+  id        String    @id @default(auto()) @map("_id") @db.ObjectId
+  userId    String    @db.ObjectId
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
 }
 
 model Patient {

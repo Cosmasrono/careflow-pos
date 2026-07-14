@@ -15,6 +15,7 @@ import {
   Field,
   LocationBadge,
   PageHeader,
+  Spinner,
   StayBadge,
   cn,
   inputClass,
@@ -345,7 +346,7 @@ function PatientResultRow({
               disabled={!doctorId || submitting}
               onClick={checkIn}
             >
-              {submitting ? "…" : "Confirm"}
+              {submitting ? <Spinner /> : "Confirm"}
             </Button>
           </div>
           {error && (
@@ -745,15 +746,6 @@ function PatientsTab() {
 }
 
 // --- small shared pieces -----------------------------------------------------
-
-function Spinner() {
-  return (
-    <span
-      aria-hidden
-      className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white"
-    />
-  );
-}
 
 function Avatar({ name }: { name: string }) {
   const initials =

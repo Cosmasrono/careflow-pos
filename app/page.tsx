@@ -95,10 +95,10 @@ export default function LandingPage() {
         />
         <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-4 py-10 sm:px-6 lg:grid-cols-2 lg:py-14">
           <div>
-            <p className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-800 ring-1 ring-inset ring-teal-600/20">
+            {/* <p className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-800 ring-1 ring-inset ring-teal-600/20">
               <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
               Walk-ins welcome, every day
-            </p>
+            </p> */}
             <h1 className="mt-4 font-display text-4xl font-semibold tracking-tight text-teal-950 sm:text-[3.4rem] sm:leading-[1.08]">
               Care that moves with you, from reception to pharmacy
             </h1>

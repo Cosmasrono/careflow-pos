@@ -56,6 +56,13 @@ export const NAV: NavItem[] = [
     roles: ["admin"],
   },
   {
+    // Revenue, throughput and pharmacy reports over any period.
+    href: "/reports",
+    label: "Reports",
+    icon: "📊",
+    roles: ["admin"],
+  },
+  {
     href: "/reception",
     label: "Reception & Triage",
     icon: "➕",

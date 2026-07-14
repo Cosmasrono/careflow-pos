@@ -7,9 +7,11 @@ import { cn } from "./ui";
 import { useSession } from "./SessionProvider";
 import { navForRole, ROLE_LABELS } from "@/lib/auth/roles";
 import { RouteLoadingOverlay } from "./PageLoadGate";
+import { AiAssistant } from "./AiAssistant";
 
 const PAGE_BG: { prefix: string; img: string }[] = [
   { prefix: "/dashboard", img: "/images/ward.jpg" },
+  { prefix: "/reports", img: "/images/ward.jpg" },
   { prefix: "/reception", img: "/images/consultation.jpg" },
   { prefix: "/doctor", img: "/images/hero-doctor.jpg" },
   { prefix: "/services", img: "/images/lab.jpg" },
@@ -164,8 +166,11 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </main>
       </div>
+
+      <AiAssistant />
     </div>
     </>
+
   );
 }
 

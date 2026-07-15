@@ -130,7 +130,8 @@ export default function UsersPage() {
             <EmptyState>No users yet.</EmptyState>
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto">
+              <table className="w-full min-w-[720px] text-sm">
                 <thead className="bg-zinc-50 text-left text-xs uppercase text-zinc-500">
                   <tr>
                     <th className="px-4 py-2 font-medium">Name</th>
@@ -206,6 +207,7 @@ export default function UsersPage() {
                   ))}
                 </tbody>
               </table>
+              </div>
             </div>
           )}
         </div>

@@ -299,26 +299,28 @@ export default function ReportsPage() {
               No pharmacy sales in this window.
             </p>
           ) : (
-            <table className="mt-3 w-full text-sm">
-              <thead>
-                <tr className="text-left text-xs text-zinc-400">
-                  <th className="pb-2 font-medium">Medicine</th>
-                  <th className="pb-2 text-right font-medium">Qty</th>
-                  <th className="pb-2 text-right font-medium">Revenue</th>
-                </tr>
-              </thead>
-              <tbody>
-                {report.topMedicines.map((m) => (
-                  <tr key={m.name} className="border-t border-zinc-100">
-                    <td className="py-2 text-zinc-700">{m.name}</td>
-                    <td className="py-2 text-right tabular-nums">{m.qty}</td>
-                    <td className="py-2 text-right tabular-nums font-medium">
-                      {money(m.amount)}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="mt-3 w-full min-w-[360px] text-sm">
+                <thead>
+                  <tr className="text-left text-xs text-zinc-400">
+                    <th className="pb-2 font-medium">Medicine</th>
+                    <th className="pb-2 text-right font-medium">Qty</th>
+                    <th className="pb-2 text-right font-medium">Revenue</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {report.topMedicines.map((m) => (
+                    <tr key={m.name} className="border-t border-zinc-100">
+                      <td className="py-2 text-zinc-700">{m.name}</td>
+                      <td className="py-2 text-right tabular-nums">{m.qty}</td>
+                      <td className="py-2 text-right tabular-nums font-medium">
+                        {money(m.amount)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
         </Card>
 

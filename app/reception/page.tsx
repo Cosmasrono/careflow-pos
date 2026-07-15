@@ -425,15 +425,15 @@ function RegisterForm({
         e.preventDefault();
         void submit();
       }}
-      className="mt-4 grid grid-cols-2 gap-4 border-t border-zinc-100 pt-4"
+      className="mt-4 grid grid-cols-1 gap-4 border-t border-zinc-100 pt-4 sm:grid-cols-2"
     >
-      <div className="col-span-2 flex items-center justify-between">
+      <div className="col-span-1 flex items-center justify-between sm:col-span-2">
         <h3 className="text-sm font-semibold text-zinc-700">New patient</h3>
         <Button size="sm" variant="ghost" onClick={onCancel}>
           Cancel
         </Button>
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 sm:col-span-2">
         <Field label="National ID">
           <input
             className={inputClass}
@@ -479,7 +479,7 @@ function RegisterForm({
           onChange={setField("age")}
         />
       </Field>
-      <div className="col-span-2">
+      <div className="col-span-1 sm:col-span-2">
         <Field label="Phone">
           <input
             className={inputClass}
@@ -489,11 +489,11 @@ function RegisterForm({
           />
         </Field>
       </div>
-      <div className="col-span-2">
+      <div className="col-span-1 sm:col-span-2">
         <DoctorPicker value={doctorId} onChange={setDoctorId} />
       </div>
       {error && <ErrorBanner message={error} onDismiss={() => setError(null)} />}
-      <div className="col-span-2">
+      <div className="col-span-1 sm:col-span-2">
         <Button type="submit" className="w-full" disabled={submitting}>
           {submitting && <Spinner />}
           {submitting ? "Registering…" : "Register & check in"}

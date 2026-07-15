@@ -110,6 +110,24 @@ export default function UsersPage() {
     if (email !== null) patch(u.id, { email });
   };
 
+  const removeUser = async (u: StaffUser) => {
+    const proceed = confirm(`Delete ${u.name}? This cannot be undone.`);
+    if (!proceed) return;
+
+    const res = await fetch("/api/users", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id: u.id }),
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string };
+      notify("error", body.error ?? "Could not delete user.");
+      return;
+    }
+    setUsers((await res.json()).users);
+    notify("success", "User deleted.");
+  };
+
   return (
     <div>
       <PageHeader
@@ -200,6 +218,13 @@ export default function UsersPage() {
                             onClick={() => patch(u.id, { active: !u.active })}
                           >
                             {u.active ? "Disable" : "Enable"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => removeUser(u)}
+                          >
+                            Delete
                           </Button>
                         </div>
                       </td>

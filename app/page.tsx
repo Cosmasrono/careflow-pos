@@ -265,10 +265,19 @@ export default function LandingPage() {
         <a
           href="https://unsplash.com"
           className="underline"
-          rel="noreferrer"
+          rel="noopener noreferrer"
           target="_blank"
         >
           Unsplash
+        </a>
+        . Powered by{" "}
+        <a
+          href="https://nebtech.online"
+          className="underline"
+          rel="noopener noreferrer"
+          target="_blank"
+        >
+          nebtech.online
         </a>
         .
       </footer>

@@ -42,7 +42,7 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,7 +55,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -82,16 +82,16 @@ function LoginForm() {
         Sign in
       </h1>
       <p className="mb-5 text-sm text-zinc-500">
-        Enter the username and password your administrator gave you.
+        Enter the email and password your administrator gave you.
       </p>
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <Field label="Username">
+        <Field label="Email">
           <input
             className={inputClass}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
             autoFocus
-            autoComplete="username"
+            autoComplete="email"
             required
           />
         </Field>

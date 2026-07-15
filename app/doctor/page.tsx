@@ -104,14 +104,19 @@ export default function DoctorPage() {
           ) : (
             queue.map((v) => {
               const p = pmap.get(v.patientId);
+              const emergency = v.priority === "emergency";
               return (
                 <button
                   key={v.id}
                   onClick={() => setSelectedId(v.id)}
                   className={`rounded-xl border p-3 text-left transition-colors ${
                     selectedId === v.id
-                      ? "border-teal-500 bg-teal-50"
-                      : "border-zinc-200 bg-white hover:border-zinc-300"
+                      ? emergency
+                        ? "border-red-500 bg-red-50"
+                        : "border-teal-500 bg-teal-50"
+                      : emergency
+                        ? "border-red-300 bg-red-50/60 hover:border-red-400"
+                        : "border-zinc-200 bg-white hover:border-zinc-300"
                   }`}
                 >
                   <div className="flex items-center justify-between gap-2">
@@ -119,6 +124,11 @@ export default function DoctorPage() {
                       {patientName(p)}
                     </span>
                     <div className="flex items-center gap-1">
+                      {emergency && (
+                        <span className="rounded-full bg-red-600 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                          Emergency
+                        </span>
+                      )}
                       {v.priority && v.priority !== "normal" && (
                         <PriorityBadge priority={v.priority} />
                       )}
@@ -187,6 +197,7 @@ function ConsultPanel({ visitId }: { visitId: string }) {
   const visit = data.visits.find((v) => v.id === visitId);
   const patient = visit && patientMap(data).get(visit.patientId);
   const orders = ordersForVisit(data, visitId);
+  const [complaintDraft, setComplaintDraft] = useState(visit?.complaint ?? "");
 
   // The doctor either sends the patient for tests or prescribes — never both
   // forms at once. Returning patients (results in) default to prescribing.
@@ -198,6 +209,20 @@ function ConsultPanel({ visitId }: { visitId: string }) {
   );
 
   if (!visit || !patient) return null;
+
+  const complaintDirty = complaintDraft.trim() !== visit.complaint.trim();
+
+  const saveComplaintIfDirty = () => {
+    if (complaintDirty) {
+      setVisitComplaint(visitId, complaintDraft.trim());
+    }
+  };
+
+  const finalizeAndSendToPharmacy = () => {
+    // Never force a separate "Save" click before finalizing.
+    saveComplaintIfDirty();
+    sendToPharmacy(visitId);
+  };
 
   // Queue depth per doctor (this visit excluded) so reassignment shows load.
   const queueCounts = doctorQueueCounts(data, visitId);
@@ -278,9 +303,10 @@ function ConsultPanel({ visitId }: { visitId: string }) {
       {visit.status !== "waiting" && visit.status !== "completed" && (
         <div className="mt-4">
           <ComplaintEditor
-            visitId={visitId}
             initial={visit.complaint}
-            key={visit.complaint}
+            text={complaintDraft}
+            onTextChange={setComplaintDraft}
+            onSave={saveComplaintIfDirty}
           />
         </div>
       )}
@@ -352,7 +378,7 @@ function ConsultPanel({ visitId }: { visitId: string }) {
               <div className="mt-5 border-t border-zinc-100 pt-4">
                 <Button
                   disabled={!canFinalize || !hasPrescription}
-                  onClick={() => sendToPharmacy(visitId)}
+                  onClick={finalizeAndSendToPharmacy}
                   className="w-full"
                 >
                   {hasPrescription
@@ -371,21 +397,22 @@ function ConsultPanel({ visitId }: { visitId: string }) {
 }
 
 function ComplaintEditor({
-  visitId,
   initial,
+  text,
+  onTextChange,
+  onSave,
 }: {
-  visitId: string;
   initial: string;
+  text: string;
+  onTextChange: (value: string) => void;
+  onSave: () => void;
 }) {
-  const [text, setText] = useState(initial);
   const dirty = text.trim() !== initial.trim();
 
   // Persist whenever the doctor is done with the field (blur), not only on an
   // explicit Save — otherwise the complaint is lost when they type it and go
   // straight to ordering a lab/procedure.
-  const save = () => {
-    if (dirty) setVisitComplaint(visitId, text.trim());
-  };
+  const save = () => onSave();
 
   return (
     <Field label="Complaint / history (recorded by doctor)">
@@ -394,7 +421,7 @@ function ComplaintEditor({
           className={`${inputClass} flex-1`}
           placeholder="e.g. Fever and headache for 3 days"
           value={text}
-          onChange={(e) => setText(e.target.value)}
+          onChange={(e) => onTextChange(e.target.value)}
           onBlur={save}
           onKeyDown={(e) => e.key === "Enter" && save()}
         />

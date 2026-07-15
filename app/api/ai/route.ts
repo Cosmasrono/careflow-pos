@@ -21,6 +21,8 @@ interface ChatMessage {
   content: string;
 }
 
+type AiProvider = "anthropic" | "groq";
+
 /** Extra sections only an administrator's assistant gets to see. */
 function adminSnapshot(data: ClinicData): string {
   const weekStart = Date.now() - 7 * 24 * 60 * 60 * 1000;
@@ -128,9 +130,18 @@ export async function POST(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (!process.env.ANTHROPIC_API_KEY) {
+  const provider: AiProvider | null = process.env.ANTHROPIC_API_KEY
+    ? "anthropic"
+    : process.env.GROQ_API_KEY
+      ? "groq"
+      : null;
+
+  if (!provider) {
     return NextResponse.json(
-      { error: "AI is not configured. Set ANTHROPIC_API_KEY in .env and restart." },
+      {
+        error:
+          "AI is not configured. Set ANTHROPIC_API_KEY or GROQ_API_KEY in .env and restart.",
+      },
       { status: 503 },
     );
   }
@@ -153,7 +164,6 @@ export async function POST(req: Request) {
 
   try {
     const data = await repo.getClinicData();
-    const client = new Anthropic();
 
     const isAdmin = hasPermission(session.role, "ai.admin_insights");
     const system = [
@@ -171,6 +181,59 @@ export async function POST(req: Request) {
       snapshot(data),
       ...(isAdmin ? ["", adminSnapshot(data)] : []),
     ].join("\n");
+
+    if (provider === "groq") {
+      const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          temperature: 0.2,
+          messages: [
+            { role: "system", content: system },
+            ...messages.slice(-MAX_TURNS),
+          ],
+        }),
+      });
+
+      const payload = (await response.json().catch(() => null)) as
+        | {
+            error?: { message?: string };
+            choices?: Array<{ message?: { content?: string | null } }>;
+          }
+        | null;
+
+      if (!response.ok) {
+        return NextResponse.json(
+          {
+            error:
+              payload?.error?.message ??
+              "GROQ request failed. Check GROQ_API_KEY and try again.",
+          },
+          { status: response.status || 503 },
+        );
+      }
+
+      const text = payload?.choices?.[0]?.message?.content?.trim();
+      if (!text) {
+        return NextResponse.json(
+          { error: "GROQ returned an empty response." },
+          { status: 502 },
+        );
+      }
+
+      return new Response(text, {
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Cache-Control": "no-store",
+        },
+      });
+    }
+
+    const client = new Anthropic();
 
     const stream = client.messages.stream({
       model: "claude-opus-4-8",
@@ -203,13 +266,13 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error("POST /api/ai failed", err);
-    if (err instanceof Anthropic.AuthenticationError) {
+    if (provider === "anthropic" && err instanceof Anthropic.AuthenticationError) {
       return NextResponse.json(
         { error: "Invalid ANTHROPIC_API_KEY." },
         { status: 503 },
       );
     }
-    if (err instanceof Anthropic.RateLimitError) {
+    if (provider === "anthropic" && err instanceof Anthropic.RateLimitError) {
       return NextResponse.json(
         { error: "AI is rate-limited right now. Try again shortly." },
         { status: 429 },

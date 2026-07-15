@@ -8,9 +8,9 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { username, password } = await req.json();
-    const user = await prisma.user.findUnique({
-      where: { username: String(username ?? "").trim() },
+    const { email, password } = await req.json();
+    const user = await prisma.user.findFirst({
+      where: { email: String(email ?? "").trim().toLowerCase() },
     });
 
     const ok =
@@ -20,7 +20,7 @@ export async function POST(req: Request) {
 
     if (!ok || !user) {
       return NextResponse.json(
-        { error: "Invalid username or password" },
+        { error: "Invalid email or password" },
         { status: 401 },
       );
     }

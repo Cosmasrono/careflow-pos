@@ -291,13 +291,16 @@ export async function recordTriage(input: {
   vitals: Vitals;
   priority: Priority;
 }) {
+  const isEmergency = input.priority === "emergency";
   await prisma.visit.update({
     where: { id: input.visitId },
     data: {
       vitals: { set: input.vitals },
       priority: input.priority,
-      status: "waiting",
-      timeline: stage("waiting"),
+      // Emergency cases bypass the normal waiting queue and are
+      // fast-tracked straight to doctor handling.
+      status: isEmergency ? "with-doctor" : "waiting",
+      timeline: stage(isEmergency ? "with-doctor" : "waiting"),
     },
   });
 }
@@ -455,6 +458,23 @@ export async function updateUser(input: {
   }
   const user = await prisma.user.update({ where: { id: input.id }, data });
   return { user: mapUser(user) };
+}
+
+export async function getUserById(id: ID): Promise<StaffUser | null> {
+  const user = await prisma.user.findUnique({ where: { id } });
+  return user ? mapUser(user) : null;
+}
+
+export async function deleteUser(
+  id: ID,
+): Promise<{ error: string } | { ok: true }> {
+  const user = await prisma.user.findUnique({ where: { id } });
+  if (!user) return { error: "User not found." };
+  if (user.email?.toLowerCase() === "ccosmas001@gmail.com") {
+    return { error: "This user cannot be deleted." };
+  }
+  await prisma.user.delete({ where: { id } });
+  return { ok: true };
 }
 
 // --- password reset ----------------------------------------------------------

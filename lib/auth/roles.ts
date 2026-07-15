@@ -10,6 +10,19 @@ export type Role =
   | "radiology"
   | "pharmacist";
 
+export type Permission =
+  | "users.manage"
+  | "mpesa.initiate"
+  | "activity.view_all"
+  | "activity.review"
+  | "ai.admin_insights"
+  | "clinic.mutate.all"
+  | "clinic.reception.manage"
+  | "clinic.doctor.manage"
+  | "clinic.services.manage"
+  | "clinic.pharmacy.manage"
+  | "clinic.medicine.manage";
+
 export interface SessionUser {
   id: string;
   username: string;
@@ -36,6 +49,36 @@ export const ROLE_LABELS: Record<Role, string> = {
   radiology: "Radiology technician",
   pharmacist: "Pharmacist",
 };
+
+export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
+  admin: [
+    "users.manage",
+    "mpesa.initiate",
+    "activity.view_all",
+    "activity.review",
+    "ai.admin_insights",
+    "clinic.mutate.all",
+    "clinic.reception.manage",
+    "clinic.doctor.manage",
+    "clinic.services.manage",
+    "clinic.pharmacy.manage",
+    "clinic.medicine.manage",
+  ],
+  receptionist: ["clinic.reception.manage"],
+  nurse: ["clinic.reception.manage"],
+  doctor: ["clinic.doctor.manage"],
+  lab: ["clinic.services.manage"],
+  radiology: ["clinic.services.manage"],
+  pharmacist: [
+    "mpesa.initiate",
+    "clinic.pharmacy.manage",
+    "clinic.medicine.manage",
+  ],
+};
+
+export function hasPermission(role: Role, permission: Permission): boolean {
+  return ROLE_PERMISSIONS[role]?.includes(permission) ?? false;
+}
 
 export interface NavItem {
   href: string;

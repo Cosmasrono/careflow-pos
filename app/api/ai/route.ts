@@ -8,7 +8,7 @@ import { NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
 import * as repo from "@/lib/server/clinic-repo";
 import { getSession } from "@/lib/auth/session";
-import { ROLE_LABELS } from "@/lib/auth/roles";
+import { hasPermission, ROLE_LABELS } from "@/lib/auth/roles";
 import type { ClinicData, Visit } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -155,7 +155,7 @@ export async function POST(req: Request) {
     const data = await repo.getClinicData();
     const client = new Anthropic();
 
-    const isAdmin = session.role === "admin";
+    const isAdmin = hasPermission(session.role, "ai.admin_insights");
     const system = [
       "You are the CareFlow assistant, embedded in a small clinic's management app in Kenya.",
       `You are talking to ${session.name}, a ${ROLE_LABELS[session.role]}.`,

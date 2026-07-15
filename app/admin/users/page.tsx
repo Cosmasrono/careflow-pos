@@ -30,6 +30,11 @@ const emptyForm = {
   password: "",
 };
 
+type UsersApiResponse = {
+  users: StaffUser[];
+  warning?: string;
+};
+
 export default function UsersPage() {
   const [users, setUsers] = useState<StaffUser[]>([]);
   const [form, setForm] = useState(emptyForm);
@@ -66,9 +71,15 @@ export default function UsersPage() {
       notify("error", message);
       return;
     }
-    setUsers((await res.json()).users);
+    const body = (await res.json()) as UsersApiResponse;
+    setUsers(body.users);
     setForm(emptyForm);
     notify("success", "Staff account created.");
+    if (body.warning) {
+      notify("error", body.warning);
+    } else if (form.email.trim()) {
+      notify("success", "Password setup link sent by email.");
+    }
   };
 
   const patch = async (id: string, changes: Partial<StaffUser>) => {
@@ -228,7 +239,7 @@ export default function UsersPage() {
                 type="email"
                 value={form.email}
                 onChange={set("email")}
-                placeholder="optional"
+                placeholder="recommended"
               />
             </Field>
             <Field label="Role">
@@ -244,12 +255,13 @@ export default function UsersPage() {
                 ))}
               </select>
             </Field>
-            <Field label="Temporary password">
+            <Field label="Temporary password (optional)">
               <input
                 className={inputClass}
+                type="password"
                 value={form.password}
                 onChange={set("password")}
-                required
+                placeholder="Leave empty to require setup by email"
               />
             </Field>
             {error && (

@@ -6,7 +6,7 @@
 import { NextResponse } from "next/server";
 import * as repo from "@/lib/server/clinic-repo";
 import { getSession } from "@/lib/auth/session";
-import type { Role } from "@/lib/auth/roles";
+import { hasPermission, type Permission } from "@/lib/auth/roles";
 
 // Prisma needs the Node.js runtime, and reads must never be cached.
 export const runtime = "nodejs";
@@ -26,27 +26,25 @@ export async function GET() {
   }
 }
 
-// Which roles may perform each mutation. Admins may perform any of them.
-// Mirrors the station that owns the action, so a user at one station cannot
-// drive another station's workflow through the API.
-const ACTION_ROLES: Record<string, Role[]> = {
-  registerPatient: ["receptionist", "nurse"],
-  startVisit: ["receptionist", "nurse"],
-  recordTriage: ["receptionist", "nurse"],
-  assignVisitDoctor: ["receptionist", "nurse", "doctor"],
-  startConsult: ["doctor"],
-  setVisitComplaint: ["doctor"],
-  addServiceOrder: ["doctor"],
-  addPrescription: ["doctor"],
-  startServiceOrder: ["lab", "radiology"],
-  completeServiceOrder: ["lab", "radiology"],
-  sendToPharmacy: ["doctor"],
-  toggleMedDispensed: ["pharmacist"],
-  dispenseAndClose: ["pharmacist"],
-  checkoutVisit: ["pharmacist"],
-  // Catalog management: pharmacists restock day-to-day; admins always can.
-  addMedicine: ["pharmacist"],
-  updateMedicine: ["pharmacist"],
+// Which permission is required for each mutation. This keeps route policies
+// centralized and decoupled from literal role names.
+const ACTION_PERMISSIONS: Record<string, Permission> = {
+  registerPatient: "clinic.reception.manage",
+  startVisit: "clinic.reception.manage",
+  recordTriage: "clinic.reception.manage",
+  assignVisitDoctor: "clinic.doctor.manage",
+  startConsult: "clinic.doctor.manage",
+  setVisitComplaint: "clinic.doctor.manage",
+  addServiceOrder: "clinic.doctor.manage",
+  addPrescription: "clinic.doctor.manage",
+  startServiceOrder: "clinic.services.manage",
+  completeServiceOrder: "clinic.services.manage",
+  sendToPharmacy: "clinic.doctor.manage",
+  toggleMedDispensed: "clinic.pharmacy.manage",
+  dispenseAndClose: "clinic.pharmacy.manage",
+  checkoutVisit: "clinic.pharmacy.manage",
+  addMedicine: "clinic.medicine.manage",
+  updateMedicine: "clinic.medicine.manage",
 };
 
 // Map each action name to its repository handler.
@@ -83,10 +81,11 @@ export async function POST(req: Request) {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    if (
-      session.role !== "admin" &&
-      !ACTION_ROLES[action]?.includes(session.role)
-    ) {
+    const actionPermission = ACTION_PERMISSIONS[action];
+    const allowed =
+      hasPermission(session.role, "clinic.mutate.all") ||
+      (actionPermission && hasPermission(session.role, actionPermission));
+    if (!allowed) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
     // Registrations are stamped with the logged-in user server-side, so a

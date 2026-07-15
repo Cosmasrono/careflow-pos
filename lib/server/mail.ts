@@ -70,3 +70,53 @@ export async function sendPasswordResetEmail(opts: {
       </div>`,
   });
 }
+
+export async function sendAccountSetupEmail(opts: {
+  to: string;
+  name: string;
+  link: string;
+}): Promise<void> {
+  const from = `"${process.env.MAIL_FROM_NAME ?? "CareFlow"}" <${
+    process.env.MAIL_FROM_ADDRESS ?? process.env.MAIL_USERNAME
+  }>`;
+
+  await transporter().sendMail({
+    from,
+    to: opts.to,
+    subject: "Set up your CareFlow account password",
+    text: [
+      `Hi ${opts.name},`,
+      "",
+      "An account has been created for you on CareFlow.",
+      "Open the link below to choose your password.",
+      "The link expires in 30 minutes and can only be used once.",
+      "",
+      opts.link,
+      "",
+      "If you were not expecting this, contact your administrator.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px">
+        <h2 style="color:#134e4a;margin:0 0 12px">Set up your CareFlow password</h2>
+        <p style="color:#3f3f46;line-height:1.6">Hi ${opts.name},</p>
+        <p style="color:#3f3f46;line-height:1.6">
+          An account has been created for you on CareFlow. Click the button below
+          to choose your password. The link expires in <strong>30 minutes</strong>
+          and can only be used once.
+        </p>
+        <p style="margin:24px 0">
+          <a href="${opts.link}"
+             style="background:#0d9488;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;display:inline-block;font-weight:600">
+            Set my password
+          </a>
+        </p>
+        <p style="color:#71717a;font-size:13px;line-height:1.6">
+          If the button doesn't work, copy this link into your browser:<br/>
+          <a href="${opts.link}" style="color:#0d9488;word-break:break-all">${opts.link}</a>
+        </p>
+        <p style="color:#71717a;font-size:13px">
+          If you were not expecting this, contact your administrator.
+        </p>
+      </div>`,
+  });
+}

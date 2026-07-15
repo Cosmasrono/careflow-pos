@@ -4,7 +4,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SESSION_COOKIE, verifySession } from "@/lib/auth/jwt";
-import { canAccess, homeForRole } from "@/lib/auth/roles";
+import { canAccess, hasPermission, homeForRole } from "@/lib/auth/roles";
 
 export async function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
@@ -48,14 +48,15 @@ export async function proxy(req: NextRequest) {
   }
 
   if (isApi) {
-    // Only admins may touch user management.
-    if (pathname.startsWith("/api/users") && session.role !== "admin") {
+    if (
+      pathname.startsWith("/api/users") &&
+      !hasPermission(session.role, "users.manage")
+    ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    // Payments are initiated at the pharmacy POS only.
     if (
       pathname.startsWith("/api/mpesa") &&
-      !["pharmacist", "admin"].includes(session.role)
+      !hasPermission(session.role, "mpesa.initiate")
     ) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }

@@ -391,11 +391,11 @@ export async function createUser(input: {
   email?: string;
   name: string;
   role: Role;
-  password: string;
+  password?: string;
 }): Promise<{ error: string } | { user: StaffUser }> {
   const username = input.username.trim().toLowerCase();
-  if (!username || !input.name.trim() || !input.password) {
-    return { error: "Username, name and password are required." };
+  if (!username || !input.name.trim()) {
+    return { error: "Username and name are required." };
   }
   const existing = await prisma.user.findUnique({ where: { username } });
   if (existing) return { error: "That username is already taken." };
@@ -405,13 +405,25 @@ export async function createUser(input: {
     return { error: "That email is already used by another account." };
   }
 
+  const password = String(input.password ?? "").trim();
+  if (!password && !email) {
+    return {
+      error:
+        "Provide either a temporary password or an email address for setup.",
+    };
+  }
+
+  // When no temporary password is provided, store a random one so the user
+  // must use the setup/reset email to choose their real password.
+  const bootstrapPassword = password || randomBytes(24).toString("base64url");
+
   const user = await prisma.user.create({
     data: {
       username,
       email,
       name: input.name.trim(),
       role: input.role,
-      passwordHash: await hashPassword(input.password),
+      passwordHash: await hashPassword(bootstrapPassword),
       active: true,
     },
   });

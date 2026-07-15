@@ -7,6 +7,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSession } from "@/lib/auth/session";
+import { hasPermission, type Role } from "@/lib/auth/roles";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -38,9 +39,10 @@ function mapRequest(r: ActivityRow) {
   };
 }
 
-async function listFor(session: { id: string; role: string }) {
+async function listFor(session: { id: string; role: Role }) {
+  const mayViewAll = hasPermission(session.role, "activity.view_all");
   const requests = await prisma.activityRequest.findMany({
-    where: session.role === "admin" ? undefined : { userId: session.id },
+    where: mayViewAll ? undefined : { userId: session.id },
     orderBy: { createdAt: "desc" },
   });
   return requests.map(mapRequest);
@@ -158,7 +160,7 @@ export async function PATCH(req: Request) {
   if (!session) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
-  if (session.role !== "admin") {
+  if (!hasPermission(session.role, "activity.review")) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 

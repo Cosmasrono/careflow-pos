@@ -4,6 +4,7 @@
 // (at most two hours) — and admins approve or decline the pending ones.
 
 import { useEffect, useState } from "react";
+import { hasPermission, ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import {
   Button,
   Card,
@@ -15,7 +16,6 @@ import {
   inputClass,
 } from "@/components/ui";
 import { useSession } from "@/components/SessionProvider";
-import { ROLE_LABELS, type Role } from "@/lib/auth/roles";
 import { notify } from "@/lib/toast";
 
 const MAX_EXCUSE_HOURS = 2;
@@ -133,7 +133,7 @@ export default function ActivityPage() {
     };
   }, []);
 
-  const isAdmin = session?.role === "admin";
+  const isAdmin = session ? hasPermission(session.role, "activity.review") : false;
   const mine = requests.filter((r) => r.userId === session?.id);
   const pendingOthers = requests.filter(
     (r) => r.status === "pending" && r.userId !== session?.id,

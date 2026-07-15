@@ -238,15 +238,15 @@ export default function LandingPage() {
             <p className="mt-3 max-w-xl text-sm leading-6 text-teal-100">
               No appointment needed — walk in and reception will register you in
               minutes. For enquiries call{" "}
-              <a href="tel:+254700000000" className="font-medium text-white underline">
-                +254 700 000 000
+              <a href="tel:0757450716" className="font-medium text-white underline">
+                0757450716
               </a>{" "}
               or email{" "}
               <a
-                href="mailto:hello@careflow.clinic"
+                href="mailto:ccosmas001@gmail.com"
                 className="font-medium text-white underline"
               >
-                hello@careflow.clinic
+                ccosmas001@gmail.com
               </a>
               .
             </p>

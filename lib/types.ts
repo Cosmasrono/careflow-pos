@@ -92,7 +92,8 @@ export interface Medicine {
   name: string;
   strength: string; // e.g. "500mg", "20/120"
   form: string; // tablet | capsule | syrup | inhaler | cream | sachet
-  unitPrice: number;
+  unitPrice: number; // selling price at the POS
+  costPrice: number; // what the clinic pays the supplier
   stock: number;
 }
 
@@ -103,6 +104,27 @@ export interface SaleItem {
   name: string;
   quantity: number;
   unitPrice: number;
+  unitCost?: number; // catalog costPrice at checkout; absent on older sales
+}
+
+export type ExpenseCategory =
+  | "rent"
+  | "salaries"
+  | "utilities"
+  | "supplies"
+  | "equipment"
+  | "other";
+
+/** A running cost of the clinic, logged by an admin. Together with sale
+ *  costs these make up the expense side of the profit & loss report. */
+export interface Expense {
+  id: ID;
+  description: string;
+  category: ExpenseCategory;
+  amount: number;
+  date: string; // the day the expense applies to
+  recordedBy?: string;
+  createdAt: string;
 }
 
 export type PaymentMethod = "cash" | "mpesa" | "card";
@@ -140,4 +162,5 @@ export interface ClinicData {
   visits: Visit[];
   orders: Order[];
   medicines: Medicine[];
+  expenses: Expense[]; // admin-only; empty for other roles
 }

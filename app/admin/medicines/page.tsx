@@ -35,6 +35,7 @@ const emptyForm = {
   strength: "",
   form: "tablet",
   unitPrice: "",
+  costPrice: "",
   stock: "",
 };
 
@@ -85,19 +86,20 @@ export default function MedicinesPage() {
           ) : (
             <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white">
               <div className="overflow-x-auto">
-              <table className="w-full min-w-[560px] text-sm">
+              <table className="w-full min-w-[680px] text-sm">
                 <thead className="bg-zinc-50 text-left text-xs uppercase text-zinc-500">
                   <tr>
                     <th className="px-4 py-2 font-medium">Medicine</th>
                     <th className="px-4 py-2 font-medium">Form</th>
-                    <th className="px-4 py-2 font-medium">Unit price</th>
+                    <th className="px-4 py-2 font-medium">Cost price</th>
+                    <th className="px-4 py-2 font-medium">Selling price</th>
                     <th className="px-4 py-2 font-medium">In stock</th>
                   </tr>
                 </thead>
                 <tbody>
                   {medicines.map((m) => (
                     <MedicineRow
-                      key={`${m.id}-${m.unitPrice}-${m.stock}`}
+                      key={`${m.id}-${m.unitPrice}-${m.costPrice}-${m.stock}`}
                       med={m}
                     />
                   ))}
@@ -119,14 +121,19 @@ export default function MedicinesPage() {
  *  field loses focus (or on Enter) — no separate edit screen. */
 function MedicineRow({ med }: { med: Medicine }) {
   const [price, setPrice] = useState(String(med.unitPrice));
+  const [cost, setCost] = useState(String(med.costPrice));
   const [stock, setStock] = useState(String(med.stock));
   const [error, setError] = useState<string | null>(null);
 
   const save = async () => {
     setError(null);
-    const changes: { unitPrice?: number; stock?: number } = {};
+    const changes: { unitPrice?: number; costPrice?: number; stock?: number } =
+      {};
     if (price.trim() !== String(med.unitPrice)) {
       changes.unitPrice = Number(price);
+    }
+    if (cost.trim() !== String(med.costPrice)) {
+      changes.costPrice = Number(cost);
     }
     if (stock.trim() !== String(med.stock)) changes.stock = Number(stock);
     if (Object.keys(changes).length === 0) return;
@@ -153,11 +160,25 @@ function MedicineRow({ med }: { med: Medicine }) {
           type="number"
           min="0"
           step="0.01"
+          value={cost}
+          onChange={(e) => setCost(e.target.value)}
+          onBlur={save}
+          onKeyDown={onKey}
+          aria-label={`Cost price of ${med.name}`}
+        />
+        <p className="mt-1 text-xs text-zinc-400">{money(med.costPrice)}</p>
+      </td>
+      <td className="px-4 py-2">
+        <input
+          className={`${inputClass} h-8 w-28`}
+          type="number"
+          min="0"
+          step="0.01"
           value={price}
           onChange={(e) => setPrice(e.target.value)}
           onBlur={save}
           onKeyDown={onKey}
-          aria-label={`Unit price of ${med.name}`}
+          aria-label={`Selling price of ${med.name}`}
         />
         <p className="mt-1 text-xs text-zinc-400">{money(med.unitPrice)}</p>
       </td>
@@ -203,6 +224,7 @@ function AddMedicineForm() {
       strength: form.strength,
       form: form.form,
       unitPrice: Number(form.unitPrice),
+      costPrice: Number(form.costPrice) || 0,
       stock: Number(form.stock) || 0,
     });
     if (err) {
@@ -249,7 +271,18 @@ function AddMedicineForm() {
             ))}
           </select>
         </Field>
-        <Field label="Unit price (KSh)">
+        <Field label="Cost price (KSh) — what you pay the supplier">
+          <input
+            className={inputClass}
+            type="number"
+            min="0"
+            step="0.01"
+            value={form.costPrice}
+            onChange={set("costPrice")}
+            placeholder="e.g. 6"
+          />
+        </Field>
+        <Field label="Selling price (KSh)">
           <input
             className={inputClass}
             type="number"

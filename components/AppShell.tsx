@@ -70,7 +70,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     <>
     {navigating && <RouteLoadingOverlay />}
     <div className="flex min-h-screen bg-[#f3f8f7] text-zinc-900">
-      <aside className="hidden w-60 shrink-0 flex-col bg-linear-to-b from-teal-950 to-teal-900 p-3.5 text-teal-50 sm:flex">
+      <aside className="hidden w-60 shrink-0 flex-col bg-linear-to-b from-teal-950 to-teal-900 p-3.5 text-teal-50 sm:flex print:!hidden">
         <div className="mb-4 flex items-center gap-2.5 px-2">
           <BrandMark />
           <div>
@@ -114,7 +114,7 @@ export function AppShell({ children }: { children: ReactNode }) {
 
       <div className="flex min-w-0 flex-1 flex-col">
         {/* Mobile top bar */}
-        <header className="flex items-center justify-between bg-teal-950 px-4 py-2.5 text-white sm:hidden">
+        <header className="flex items-center justify-between bg-teal-950 px-4 py-2.5 text-white sm:hidden print:!hidden">
           <div className="flex items-center gap-2">
             <BrandMark size="sm" />
             <span className="font-display font-semibold">CareFlow</span>
@@ -126,7 +126,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             Sign out
           </button>
         </header>
-        <nav className="flex gap-1 overflow-x-auto bg-teal-950 px-2 pb-1.5 sm:hidden">
+        <nav className="flex gap-1 overflow-x-auto bg-teal-950 px-2 pb-1.5 sm:hidden print:!hidden">
           {nav.map((item) => {
             const active =
               item.href === "/"
@@ -155,10 +155,10 @@ export function AppShell({ children }: { children: ReactNode }) {
             <>
               <div
                 aria-hidden
-                className="absolute inset-0 bg-cover bg-center"
+                className="absolute inset-0 bg-cover bg-center print:hidden"
                 style={{ backgroundImage: `url(${bg})` }}
               />
-              <div className="absolute inset-0 bg-[#f3f8f7]/93 backdrop-blur-[2px]" />
+              <div className="absolute inset-0 bg-[#f3f8f7]/93 backdrop-blur-[2px] print:hidden" />
             </>
           )}
           <div className="relative mx-auto w-full max-w-6xl p-3 sm:p-6">
@@ -167,7 +167,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         </main>
       </div>
 
-      <AiAssistant />
+      <div className="print:hidden">
+        <AiAssistant />
+      </div>
     </div>
     </>
 

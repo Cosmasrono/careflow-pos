@@ -21,7 +21,8 @@ export type Permission =
   | "clinic.doctor.manage"
   | "clinic.services.manage"
   | "clinic.pharmacy.manage"
-  | "clinic.medicine.manage";
+  | "clinic.medicine.manage"
+  | "clinic.finance.manage";
 
 export interface SessionUser {
   id: string;
@@ -63,6 +64,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "clinic.services.manage",
     "clinic.pharmacy.manage",
     "clinic.medicine.manage",
+    "clinic.finance.manage",
   ],
   receptionist: ["clinic.reception.manage"],
   nurse: ["clinic.reception.manage"],
@@ -156,6 +158,13 @@ export const NAV: NavItem[] = [
     label: "Medicines",
     icon: "📦",
     roles: ["pharmacist", "admin"],
+  },
+  {
+    // The accountant's page: expenses, cost of goods sold and P&L.
+    href: "/admin/accounting",
+    label: "Accounting",
+    icon: "💰",
+    roles: ["admin"],
   },
   { href: "/admin/users", label: "Users", icon: "⚙️", roles: ["admin"] },
 ];

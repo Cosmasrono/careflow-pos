@@ -8,6 +8,8 @@ import { mpesaConfigured } from "@/lib/server/mpesa";
 import type {
   ClinicData,
   Doctor,
+  Expense,
+  ExpenseCategory,
   Gender,
   ID,
   Med,
@@ -92,7 +94,22 @@ function mapMedicine(m: MedicineRow): Medicine {
     strength: m.strength,
     form: m.form,
     unitPrice: m.unitPrice,
+    costPrice: m.costPrice,
     stock: m.stock,
+  };
+}
+
+type ExpenseRow = Awaited<ReturnType<typeof prisma.expense.findFirstOrThrow>>;
+
+function mapExpense(e: ExpenseRow): Expense {
+  return {
+    id: e.id,
+    description: e.description,
+    category: e.category as ExpenseCategory,
+    amount: e.amount,
+    date: e.date.toISOString(),
+    recordedBy: e.recordedBy ?? undefined,
+    createdAt: e.createdAt.toISOString(),
   };
 }
 
@@ -174,8 +191,11 @@ async function doctorAbsentError(
 /** Every staff member sees the whole clinic: all patients, their visit
  *  statuses and timings. (Who registered a patient is still recorded on the
  *  record, it just doesn't restrict visibility.) */
-export async function getClinicData(): Promise<ClinicData> {
-  const [allDoctors, absent, patients, visits, orders, medicines] =
+export async function getClinicData(opts?: {
+  // Expenses are financial data — only admins get them in the dataset.
+  includeFinance?: boolean;
+}): Promise<ClinicData> {
+  const [allDoctors, absent, patients, visits, orders, medicines, expenses] =
     await Promise.all([
       prisma.user.findMany({
         where: { role: "doctor", active: true },
@@ -186,6 +206,9 @@ export async function getClinicData(): Promise<ClinicData> {
       prisma.visit.findMany({ orderBy: { createdAt: "asc" } }),
       prisma.order.findMany({ orderBy: { createdAt: "asc" } }),
       prisma.medicine.findMany({ orderBy: { name: "asc" } }),
+      opts?.includeFinance
+        ? prisma.expense.findMany({ orderBy: { date: "desc" } })
+        : Promise.resolve([]),
     ]);
 
   // Staff away today (approved leave/excuse) are not offered for assignment.
@@ -197,6 +220,7 @@ export async function getClinicData(): Promise<ClinicData> {
     visits: visits.map(mapVisit),
     orders: orders.map(mapOrder),
     medicines: medicines.map(mapMedicine),
+    expenses: expenses.map(mapExpense),
   };
 }
 
@@ -545,6 +569,7 @@ export async function addMedicine(input: {
   strength: string;
   form: string;
   unitPrice: number;
+  costPrice?: number;
   stock: number;
 }): Promise<{ error: string } | void> {
   const name = input.name?.trim();
@@ -555,6 +580,10 @@ export async function addMedicine(input: {
   const unitPrice = Number(input.unitPrice);
   if (!Number.isFinite(unitPrice) || unitPrice < 0) {
     return { error: "Enter a valid unit price." };
+  }
+  const costPrice = Number(input.costPrice ?? 0);
+  if (!Number.isFinite(costPrice) || costPrice < 0) {
+    return { error: "Enter a valid cost price." };
   }
   const stock = Math.max(0, Math.round(Number(input.stock) || 0));
 
@@ -572,22 +601,30 @@ export async function addMedicine(input: {
   }
 
   await prisma.medicine.create({
-    data: { name, strength, form, unitPrice, stock },
+    data: { name, strength, form, unitPrice, costPrice, stock },
   });
 }
 
 export async function updateMedicine(input: {
   id: ID;
   unitPrice?: number;
+  costPrice?: number;
   stock?: number;
 }): Promise<{ error: string } | void> {
-  const data: { unitPrice?: number; stock?: number } = {};
+  const data: { unitPrice?: number; costPrice?: number; stock?: number } = {};
   if (input.unitPrice !== undefined) {
     const unitPrice = Number(input.unitPrice);
     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
       return { error: "Enter a valid unit price." };
     }
     data.unitPrice = unitPrice;
+  }
+  if (input.costPrice !== undefined) {
+    const costPrice = Number(input.costPrice);
+    if (!Number.isFinite(costPrice) || costPrice < 0) {
+      return { error: "Enter a valid cost price." };
+    }
+    data.costPrice = costPrice;
   }
   if (input.stock !== undefined) {
     const stock = Math.round(Number(input.stock));
@@ -775,6 +812,7 @@ export async function checkoutVisit(input: {
     name: string;
     quantity: number;
     unitPrice: number;
+    unitCost: number;
   }[] = [];
   for (const item of items) {
     const med = byId.get(item.medicineId);
@@ -789,6 +827,7 @@ export async function checkoutVisit(input: {
       name: `${med.name} ${med.strength}`.trim(),
       quantity: item.quantity,
       unitPrice: med.unitPrice,
+      unitCost: med.costPrice,
     });
   }
   const total = saleItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
@@ -864,6 +903,61 @@ export async function checkoutVisit(input: {
       paidAt: paidAt.toISOString(),
     },
   };
+}
+
+// --- expenses (admin) --------------------------------------------------------
+
+const EXPENSE_CATEGORIES: ExpenseCategory[] = [
+  "rent",
+  "salaries",
+  "utilities",
+  "supplies",
+  "equipment",
+  "other",
+];
+
+export async function addExpense(input: {
+  description: string;
+  category: string;
+  amount: number;
+  date: string; // "YYYY-MM-DD" from the date picker
+  recordedById?: ID; // stamped from the session by the API route
+  recordedBy?: string;
+}): Promise<{ error: string } | void> {
+  const description = input.description?.trim();
+  if (!description) return { error: "Describe the expense." };
+
+  const category = EXPENSE_CATEGORIES.includes(input.category as ExpenseCategory)
+    ? input.category
+    : "other";
+
+  const amount = Number(input.amount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: "Enter an amount greater than zero." };
+  }
+
+  // Stored as the UTC midnight of the picked day, like activity dates.
+  const date = new Date(`${input.date}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return { error: "Pick a valid date." };
+
+  await prisma.expense.create({
+    data: {
+      description,
+      category,
+      amount,
+      date,
+      recordedById: input.recordedById || null,
+      recordedBy: input.recordedBy || null,
+    },
+  });
+}
+
+export async function deleteExpense(input: {
+  id: ID;
+}): Promise<{ error: string } | void> {
+  const expense = await prisma.expense.findUnique({ where: { id: input.id } });
+  if (!expense) return { error: "Expense not found." };
+  await prisma.expense.delete({ where: { id: input.id } });
 }
 
  

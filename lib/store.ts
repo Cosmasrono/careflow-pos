@@ -21,6 +21,7 @@ const EMPTY: ClinicData = {
   visits: [],
   orders: [],
   medicines: [],
+  expenses: [],
 };
 
 let state: ClinicData = EMPTY;
@@ -60,6 +61,8 @@ const ACTION_SUCCESS_MESSAGES: Record<string, string> = {
   checkoutVisit: "Payment recorded and visit closed.",
   addMedicine: "Medicine added to catalog.",
   updateMedicine: "Medicine updated.",
+  addExpense: "Expense recorded.",
+  deleteExpense: "Expense deleted.",
 };
 
 /** Send a mutation, adopt the fresh dataset, and return it so callers can pick
@@ -223,19 +226,37 @@ export async function addMedicine(input: {
   strength: string;
   form: string;
   unitPrice: number;
+  costPrice?: number;
   stock: number;
 }) {
   const { error } = await act("addMedicine", input);
   return error;
 }
 
-/** Update a catalog medicine's price and/or stock. Returns an error message
+/** Update a catalog medicine's prices and/or stock. Returns an error message
  *  on rejection, else null. */
 export async function updateMedicine(
   id: ID,
-  changes: { unitPrice?: number; stock?: number },
+  changes: { unitPrice?: number; costPrice?: number; stock?: number },
 ) {
   const { error } = await act("updateMedicine", { id, ...changes });
+  return error;
+}
+
+/** Record a running cost (rent, salaries…) for the P&L report. Returns an
+ *  error message on rejection, else null. */
+export async function addExpense(input: {
+  description: string;
+  category: string;
+  amount: number;
+  date: string; // "YYYY-MM-DD"
+}) {
+  const { error } = await act("addExpense", input);
+  return error;
+}
+
+export async function deleteExpense(id: ID) {
+  const { error } = await act("deleteExpense", { id });
   return error;
 }
 

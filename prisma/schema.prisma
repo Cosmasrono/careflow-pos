@@ -51,6 +51,7 @@ type SaleItem {
   name       String // denormalised so history survives catalog edits
   quantity   Int
   unitPrice  Float
+  unitCost   Float  @default(0) // catalog costPrice at checkout, for P&L
 }
 
 // --- Models --------------------------------------------------------------
@@ -138,9 +139,23 @@ model Medicine {
   name      String
   strength  String // e.g. "500mg", "20/120"
   form      String // tablet | capsule | syrup | inhaler | cream | sachet
-  unitPrice Float
+  unitPrice Float // selling price at the POS
+  costPrice Float    @default(0) // what the clinic pays the supplier
   stock     Int      @default(0)
   createdAt DateTime @default(now())
+}
+
+// A running cost of the clinic (rent, salaries, utilities…) logged by an
+// admin — the expense side of the profit & loss report.
+model Expense {
+  id           String   @id @default(auto()) @map("_id") @db.ObjectId
+  description  String
+  category     String // rent | salaries | utilities | supplies | equipment | other
+  amount       Float
+  date         DateTime // the day the expense applies to
+  recordedById String?  @db.ObjectId
+  recordedBy   String? // admin's name at entry time
+  createdAt    DateTime @default(now())
 }
 
 // A staff absence request: multi-day leave, or a short "excuse" of at most

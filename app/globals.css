@@ -27,3 +27,9 @@ body {
   background: #99f6e4;
   color: #042f2b;
 }
+
+@media print {
+  body {
+    background: #fff;
+  }
+}

@@ -18,7 +18,9 @@ export async function GET() {
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
-    const data = await repo.getClinicData();
+    const data = await repo.getClinicData({
+      includeFinance: hasPermission(session.role, "clinic.finance.manage"),
+    });
     return NextResponse.json(data);
   } catch (err) {
     console.error("GET /api/clinic failed", err);
@@ -45,6 +47,8 @@ const ACTION_PERMISSIONS: Record<string, Permission> = {
   checkoutVisit: "clinic.pharmacy.manage",
   addMedicine: "clinic.medicine.manage",
   updateMedicine: "clinic.medicine.manage",
+  addExpense: "clinic.finance.manage",
+  deleteExpense: "clinic.finance.manage",
 };
 
 // Map each action name to its repository handler.
@@ -65,6 +69,8 @@ const handlers: Record<string, (payload: unknown) => Promise<unknown>> = {
   checkoutVisit: (p) => repo.checkoutVisit(p as never),
   addMedicine: (p) => repo.addMedicine(p as never),
   updateMedicine: (p) => repo.updateMedicine(p as never),
+  addExpense: (p) => repo.addExpense(p as never),
+  deleteExpense: (p) => repo.deleteExpense(p as never),
 };
 
 export async function POST(req: Request) {
@@ -88,18 +94,22 @@ export async function POST(req: Request) {
     if (!allowed) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
-    // Registrations are stamped with the logged-in user server-side, so a
-    // client can never claim someone else onboarded the patient.
+    // Registrations and expenses are stamped with the logged-in user
+    // server-side, so a client can never claim someone else did it.
     const input =
       action === "registerPatient"
         ? { ...payload, registeredById: session.id }
-        : payload;
+        : action === "addExpense"
+          ? { ...payload, recordedById: session.id, recordedBy: session.name }
+          : payload;
     const result = await handler(input);
     // A rejected mutation (e.g. doctor already busy) reports { error }.
     if (result && typeof result === "object" && "error" in result) {
       return NextResponse.json(result, { status: 409 });
     }
-    const data = await repo.getClinicData();
+    const data = await repo.getClinicData({
+      includeFinance: hasPermission(session.role, "clinic.finance.manage"),
+    });
     return NextResponse.json(data);
   } catch (err) {
     console.error("POST /api/clinic failed", err);

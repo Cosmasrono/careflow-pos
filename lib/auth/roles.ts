@@ -99,22 +99,20 @@ export const NAV: NavItem[] = [
     roles: ["admin"],
   },
   {
-    // Revenue, throughput and pharmacy reports over any period.
-    href: "/reports",
-    label: "Reports",
-    icon: "📊",
-    roles: ["admin"],
-  },
-  {
     href: "/reception",
-    label: "Reception & Triage",
+    label: "Reception",
     icon: "➕",
     roles: ["receptionist", "nurse", "admin"],
   },
-  { href: "/doctor", label: "Doctor", icon: "🩺", roles: ["doctor", "admin"] },
+  {
+    href: "/doctor",
+    label: "Consultation",
+    icon: "🩺",
+    roles: ["doctor", "admin"],
+  },
   {
     href: "/services",
-    label: "Lab / Radiology / Procedures",
+    label: "Lab / Procedure",
     icon: "🔬",
     roles: ["lab", "radiology", "admin"],
   },
@@ -123,6 +121,13 @@ export const NAV: NavItem[] = [
     label: "Pharmacy",
     icon: "💊",
     roles: ["pharmacist", "admin"],
+  },
+  {
+    // Revenue, throughput and pharmacy reports over any period.
+    href: "/reports",
+    label: "Reports",
+    icon: "📊",
+    roles: ["admin"],
   },
   {
     // The live board: every staff member sees all patients' statuses and

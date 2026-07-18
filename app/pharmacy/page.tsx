@@ -280,11 +280,14 @@ function PosCard({
             detail: body.detail,
           });
           if (body.status === "success") {
-            notify("success", "M-Pesa payment confirmed.");
+              notify("success", "Payment confirmed. Money received on M-Pesa.");
             // Payment confirmed → finish the sale automatically.
             void checkout(stk.id, body.receipt ?? stk.id);
           } else {
-            notify("error", body.detail ?? "M-Pesa payment failed.");
+              notify(
+                "error",
+                body.detail ?? "Payment failed or not confirmed. No money was received.",
+              );
           }
           return;
         }
@@ -498,7 +501,8 @@ function PosCard({
           )}
           {stkFlow && stk?.status === "success" && (
             <p className="mt-3 rounded-lg bg-teal-50 p-3 text-sm text-teal-800">
-              Payment confirmed{stk.receipt ? ` (${stk.receipt})` : ""} —{" "}
+              Payment confirmed and money received
+              {stk.receipt ? ` (${stk.receipt})` : ""} —{" "}
               {error ? (
                 <>
                   the visit did not close.{" "}
@@ -517,7 +521,7 @@ function PosCard({
           )}
           {stkFlow && stk?.status === "failed" && (
             <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-              Payment failed: {stk.detail ?? "not confirmed"}.{" "}
+              Payment failed or not confirmed: {stk.detail ?? "no money received"}.{" "}
               <button className="underline" onClick={() => setStk(null)}>
                 Try again
               </button>

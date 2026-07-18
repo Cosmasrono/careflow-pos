@@ -68,6 +68,7 @@ export async function POST(req: Request) {
         phone,
         amount,
         status: "success",
+        receipt: { not: null },
         visitId: null,
         createdAt: { gte: new Date(Date.now() - 10 * 60_000) },
       },

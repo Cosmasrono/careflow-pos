@@ -140,6 +140,7 @@ function statusReference(storedReference: string): string {
 }
 
 /** Poll PayHero for the outcome of an STK push. */
+ /** Poll PayHero for the outcome of an STK push. */
 export async function stkQuery(reference: string): Promise<StkStatus> {
   const ref = statusReference(reference);
   const url = new URL(`${PAYHERO_BASE}/api/v2/transaction-status`);
@@ -160,7 +161,10 @@ export async function stkQuery(reference: string): Promise<StkStatus> {
   };
 
   const status = body.status?.toUpperCase();
-  if (res.ok && (status === "SUCCESS" || body.success === true)) {
+
+  // The payment outcome comes ONLY from `status`.
+  // `body.success` just means the lookup itself worked.
+  if (res.ok && status === "SUCCESS") {
     return {
       status: "success",
       receipt: body.provider_reference || body.third_party_reference,
@@ -169,7 +173,12 @@ export async function stkQuery(reference: string): Promise<StkStatus> {
   if (res.ok && status === "FAILED") {
     return { status: "failed", detail: body.message || "Payment failed." };
   }
-  if (res.ok && (!status || status === "QUEUED")) return { status: "pending" };
+  if (res.ok && (!status || status === "QUEUED" || status === "PENDING")) {
+    return { status: "pending" };
+  }
+
+  // Transient server/network errors: keep polling instead of killing the tx.
+  if (res.status >= 500) return { status: "pending" };
 
   return {
     status: "failed",

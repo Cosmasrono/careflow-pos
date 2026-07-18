@@ -1,6 +1,4 @@
 // GET /api/mpesa/status?id=<CheckoutRequestID>
-// The POS polls this while the customer types their PIN. Settled first by the
-// PayHero callback (if it reached us), otherwise by querying PayHero directly.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
@@ -9,10 +7,14 @@ import { stkQuery } from "@/lib/server/mpesa";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// An STK prompt only lives on the customer's phone for a minute or two. If
-// PayHero still reports pending after this, settle the row as failed so the
-// POS can stop polling. A late callback can still flip it back to success.
 const PENDING_TTL_MS = 2 * 60_000;
+
+// resultDesc stores "PayHero reference: X; CheckoutRequestID: Y" — pull out
+// the actual PayHero reference for status queries.
+function payheroRefFrom(resultDesc: string | null, fallback: string): string {
+  const m = resultDesc?.match(/PayHero reference:\s*([^;]+)/);
+  return m?.[1]?.trim() || fallback;
+}
 
 export async function GET(req: Request) {
   try {
@@ -28,6 +30,7 @@ export async function GET(req: Request) {
     }
 
     // Already settled (by the callback or an earlier poll).
+    // A "success" row is a success — receipt is metadata, not proof.
     if (tx.status !== "pending") {
       return NextResponse.json({
         status: tx.status,
@@ -36,7 +39,8 @@ export async function GET(req: Request) {
       });
     }
 
-    const result = await stkQuery(tx.resultDesc || id);
+    const result = await stkQuery(payheroRefFrom(tx.resultDesc, id));
+
     if (result.status === "pending") {
       if (Date.now() - tx.createdAt.getTime() < PENDING_TTL_MS) {
         return NextResponse.json({ status: "pending" });
@@ -53,12 +57,16 @@ export async function GET(req: Request) {
         detail: expired.resultDesc ?? undefined,
       });
     }
+
+    const success = result.status === "success";
     const updated = await prisma.mpesaTransaction.update({
       where: { checkoutRequestId: id },
       data: {
-        status: result.status,
-        receipt: result.status === "success" ? result.receipt : undefined,
-        resultDesc: result.status === "failed" ? result.detail : "Success",
+        status: success ? "success" : "failed",
+        receipt: success ? result.receipt ?? undefined : undefined,
+        resultDesc: success
+          ? "Payment confirmed"
+          : result.detail ?? "Payment failed.",
       },
     });
     return NextResponse.json({
@@ -68,7 +76,6 @@ export async function GET(req: Request) {
     });
   } catch (err) {
     console.error("GET /api/mpesa/status failed", err);
-    // Treat transient errors as still-pending so the POS keeps polling.
     return NextResponse.json({ status: "pending" });
   }
 }

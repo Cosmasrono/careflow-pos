@@ -1,12 +1,3 @@
-// PayHero M-Pesa integration: STK push and payment status query.
-//
-// Configure in .env:
-//   PAYHERO_API_USERNAME / PAYHERO_API_PASSWORD  - from PayHero API Keys
-//   PAYHERO_CHANNEL_ID                           - Payment Channels > My Payment Channels
-//   PAYHERO_CALLBACK_URL                         - public HTTPS URL for /api/mpesa/callback
-//
-// You may also set PAYHERO_AUTH_TOKEN directly. It can be either the full
-// "Basic xxx" value or just the token part.
 
 const PAYHERO_BASE = "https://backend.payhero.co.ke";
 

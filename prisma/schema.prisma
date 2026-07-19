@@ -158,6 +158,19 @@ model Expense {
   createdAt    DateTime @default(now())
 }
 
+// A daily physical cash count, entered by an admin. The reconciliation page
+// compares it against the cash recorded on that day's visit payments.
+model CashCount {
+  id          String   @id @default(auto()) @map("_id") @db.ObjectId
+  date        DateTime @unique // UTC midnight of the counted day
+  counted     Float
+  notes       String?
+  countedById String?  @db.ObjectId
+  countedBy   String? // admin's name at entry time
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 // A staff absence request: multi-day leave, or a short "excuse" of at most
 // two hours. Created by any staff member; approved or declined by an admin.
 model ActivityRequest {

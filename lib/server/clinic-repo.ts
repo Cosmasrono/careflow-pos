@@ -195,21 +195,36 @@ export async function getClinicData(opts?: {
   // Expenses are financial data — only admins get them in the dataset.
   includeFinance?: boolean;
 }): Promise<ClinicData> {
-  const [allDoctors, absent, patients, visits, orders, medicines, expenses] =
-    await Promise.all([
-      prisma.user.findMany({
-        where: { role: "doctor", active: true },
-        orderBy: { name: "asc" },
-      }),
-      absentUserIds(),
-      prisma.patient.findMany({ orderBy: { createdAt: "asc" } }),
-      prisma.visit.findMany({ orderBy: { createdAt: "asc" } }),
-      prisma.order.findMany({ orderBy: { createdAt: "asc" } }),
-      prisma.medicine.findMany({ orderBy: { name: "asc" } }),
-      opts?.includeFinance
-        ? prisma.expense.findMany({ orderBy: { date: "desc" } })
-        : Promise.resolve([]),
-    ]);
+  const [
+    allDoctors,
+    absent,
+    patients,
+    visits,
+    orders,
+    medicines,
+    expenses,
+    cashCounts,
+    mpesaTxns,
+  ] = await Promise.all([
+    prisma.user.findMany({
+      where: { role: "doctor", active: true },
+      orderBy: { name: "asc" },
+    }),
+    absentUserIds(),
+    prisma.patient.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.visit.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.order.findMany({ orderBy: { createdAt: "asc" } }),
+    prisma.medicine.findMany({ orderBy: { name: "asc" } }),
+    opts?.includeFinance
+      ? prisma.expense.findMany({ orderBy: { date: "desc" } })
+      : Promise.resolve([]),
+    opts?.includeFinance
+      ? prisma.cashCount.findMany({ orderBy: { date: "desc" } })
+      : Promise.resolve([]),
+    opts?.includeFinance
+      ? prisma.mpesaTransaction.findMany({ orderBy: { createdAt: "desc" } })
+      : Promise.resolve([]),
+  ]);
 
   // Staff away today (approved leave/excuse) are not offered for assignment.
   const doctors = allDoctors.filter((d) => !absent.has(d.id));
@@ -221,6 +236,23 @@ export async function getClinicData(opts?: {
     orders: orders.map(mapOrder),
     medicines: medicines.map(mapMedicine),
     expenses: expenses.map(mapExpense),
+    cashCounts: cashCounts.map((c) => ({
+      id: c.id,
+      date: c.date.toISOString().slice(0, 10),
+      counted: c.counted,
+      notes: c.notes ?? undefined,
+      countedBy: c.countedBy ?? undefined,
+      createdAt: c.createdAt.toISOString(),
+    })),
+    mpesaTransactions: mpesaTxns.map((t) => ({
+      id: t.id,
+      phone: t.phone,
+      amount: t.amount,
+      status: t.status as "pending" | "success" | "failed",
+      receipt: t.receipt ?? undefined,
+      visitId: t.visitId ?? undefined,
+      createdAt: t.createdAt.toISOString(),
+    })),
   };
 }
 
@@ -948,6 +980,44 @@ export async function addExpense(input: {
       date,
       recordedById: input.recordedById || null,
       recordedBy: input.recordedBy || null,
+    },
+  });
+}
+
+/** Save (or replace) the physical cash count for a day. One count per day —
+ *  re-entering the same date overwrites it, so a recount just works. */
+export async function recordCashCount(input: {
+  date: string; // "YYYY-MM-DD" from the date picker
+  counted: number;
+  notes?: string;
+  countedById?: ID; // stamped from the session by the API route
+  countedBy?: string;
+}): Promise<{ error: string } | void> {
+  const counted = Number(input.counted);
+  if (!Number.isFinite(counted) || counted < 0) {
+    return { error: "Enter the counted cash amount (zero or more)." };
+  }
+  // Stored as the UTC midnight of the picked day, like expense dates.
+  const date = new Date(`${input.date}T00:00:00.000Z`);
+  if (Number.isNaN(date.getTime())) return { error: "Pick a valid date." };
+  if (date.getTime() > Date.now()) {
+    return { error: "You cannot count cash for a future date." };
+  }
+
+  await prisma.cashCount.upsert({
+    where: { date },
+    update: {
+      counted,
+      notes: input.notes?.trim() || null,
+      countedById: input.countedById || null,
+      countedBy: input.countedBy || null,
+    },
+    create: {
+      date,
+      counted,
+      notes: input.notes?.trim() || null,
+      countedById: input.countedById || null,
+      countedBy: input.countedBy || null,
     },
   });
 }

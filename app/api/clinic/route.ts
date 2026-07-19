@@ -49,6 +49,7 @@ const ACTION_PERMISSIONS: Record<string, Permission> = {
   updateMedicine: "clinic.medicine.manage",
   addExpense: "clinic.finance.manage",
   deleteExpense: "clinic.finance.manage",
+  recordCashCount: "clinic.finance.manage",
 };
 
 // Map each action name to its repository handler.
@@ -71,6 +72,7 @@ const handlers: Record<string, (payload: unknown) => Promise<unknown>> = {
   updateMedicine: (p) => repo.updateMedicine(p as never),
   addExpense: (p) => repo.addExpense(p as never),
   deleteExpense: (p) => repo.deleteExpense(p as never),
+  recordCashCount: (p) => repo.recordCashCount(p as never),
 };
 
 export async function POST(req: Request) {
@@ -101,7 +103,9 @@ export async function POST(req: Request) {
         ? { ...payload, registeredById: session.id }
         : action === "addExpense"
           ? { ...payload, recordedById: session.id, recordedBy: session.name }
-          : payload;
+          : action === "recordCashCount"
+            ? { ...payload, countedById: session.id, countedBy: session.name }
+            : payload;
     const result = await handler(input);
     // A rejected mutation (e.g. doctor already busy) reports { error }.
     if (result && typeof result === "object" && "error" in result) {

@@ -166,6 +166,13 @@ export const NAV: NavItem[] = [
     icon: "💰",
     roles: ["admin"],
   },
+  {
+    // Daily money check: recorded payments vs counted cash and confirmed M-Pesa.
+    href: "/admin/reconciliation",
+    label: "Reconciliation",
+    icon: "⚖️",
+    roles: ["admin"],
+  },
   { href: "/admin/users", label: "Users", icon: "⚙️", roles: ["admin"] },
 ];
 

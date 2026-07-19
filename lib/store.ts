@@ -22,6 +22,8 @@ const EMPTY: ClinicData = {
   orders: [],
   medicines: [],
   expenses: [],
+  cashCounts: [],
+  mpesaTransactions: [],
 };
 
 let state: ClinicData = EMPTY;
@@ -63,6 +65,7 @@ const ACTION_SUCCESS_MESSAGES: Record<string, string> = {
   updateMedicine: "Medicine updated.",
   addExpense: "Expense recorded.",
   deleteExpense: "Expense deleted.",
+  recordCashCount: "Cash count saved.",
 };
 
 /** Send a mutation, adopt the fresh dataset, and return it so callers can pick
@@ -257,6 +260,17 @@ export async function addExpense(input: {
 
 export async function deleteExpense(id: ID) {
   const { error } = await act("deleteExpense", { id });
+  return error;
+}
+
+/** Save (or replace) the physical cash count for a day. Returns an error
+ *  message on rejection, else null. */
+export async function recordCashCount(input: {
+  date: string; // "YYYY-MM-DD"
+  counted: number;
+  notes?: string;
+}) {
+  const { error } = await act("recordCashCount", input);
   return error;
 }
 

@@ -156,6 +156,28 @@ export interface Order {
   completedAt?: string;
 }
 
+/** A daily physical cash count entered by an admin, reconciled against the
+ *  cash recorded on that day's visit payments. */
+export interface CashCount {
+  id: ID;
+  date: string; // "YYYY-MM-DD" — the counted day
+  counted: number;
+  notes?: string;
+  countedBy?: string;
+  createdAt: string;
+}
+
+/** One Daraja STK push, as exposed to the reconciliation page. */
+export interface MpesaTxn {
+  id: ID;
+  phone: string;
+  amount: number;
+  status: "pending" | "success" | "failed";
+  receipt?: string;
+  visitId?: ID;
+  createdAt: string;
+}
+
 export interface ClinicData {
   doctors: Doctor[];
   patients: Patient[];
@@ -163,4 +185,6 @@ export interface ClinicData {
   orders: Order[];
   medicines: Medicine[];
   expenses: Expense[]; // admin-only; empty for other roles
+  cashCounts: CashCount[]; // admin-only; empty for other roles
+  mpesaTransactions: MpesaTxn[]; // admin-only; empty for other roles
 }

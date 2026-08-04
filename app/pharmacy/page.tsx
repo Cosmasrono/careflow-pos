@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { PrinterIcon } from "lucide-react";
 import { checkoutVisit, dispenseAndClose, useClinic } from "@/lib/store";
 import type {
   ID,
@@ -562,10 +563,13 @@ function ReceiptCard({
   const methodLabel =
     METHODS.find((m) => m.key === receipt.method)?.label ?? receipt.method;
   return (
-    <Card className="mb-6 border-teal-300 bg-teal-50/50">
+    <Card id="payment-receipt" className="mb-6 border-teal-300 bg-teal-50/50">
       <div className="flex items-start justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-teal-900">
+          <p className="hidden text-center text-lg font-bold text-zinc-900 print:block">
+            CareFlow Clinic
+          </p>
+          <h2 className="text-sm font-semibold text-teal-900 print:mt-2 print:text-zinc-900">
             Payment received — visit closed
           </h2>
           <p className="mt-1 text-xs text-teal-700">
@@ -574,9 +578,15 @@ function ReceiptCard({
             {receipt.reference ? ` · ${receipt.reference}` : ""}
           </p>
         </div>
-        <Button size="sm" variant="ghost" onClick={onDismiss}>
-          Dismiss
-        </Button>
+        <div className="flex gap-2 print:hidden">
+          <Button size="sm" variant="secondary" onClick={() => window.print()}>
+            <PrinterIcon className="size-4" />
+            Print receipt
+          </Button>
+          <Button size="sm" variant="ghost" onClick={onDismiss}>
+            Dismiss
+          </Button>
+        </div>
       </div>
       <ul className="mt-3 flex flex-col gap-1 text-sm text-zinc-700">
         {receipt.items.map((item, i) => (

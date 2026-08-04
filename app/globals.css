@@ -32,4 +32,24 @@ body {
   body {
     background: #fff;
   }
+
+  /* A completed pharmacy checkout prints only its receipt, not the shell,
+     queues, or other patient information on screen. */
+  body:has(#payment-receipt) * {
+    visibility: hidden;
+  }
+
+  #payment-receipt,
+  #payment-receipt * {
+    visibility: visible;
+  }
+
+  #payment-receipt {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    border: 0;
+    background: #fff;
+    color: #18181b;
+  }
 }

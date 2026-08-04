@@ -563,45 +563,47 @@ function ReceiptCard({
   const methodLabel =
     METHODS.find((m) => m.key === receipt.method)?.label ?? receipt.method;
   return (
-    <Card id="payment-receipt" className="mb-6 border-teal-300 bg-teal-50/50">
-      <div className="flex items-start justify-between">
-        <div>
-          <p className="hidden text-center text-lg font-bold text-zinc-900 print:block">
-            CareFlow Clinic
-          </p>
-          <h2 className="text-sm font-semibold text-teal-900 print:mt-2 print:text-zinc-900">
-            Payment received — visit closed
-          </h2>
-          <p className="mt-1 text-xs text-teal-700">
-            {receipt.patient} ({receipt.mrn}) ·{" "}
-            {receipt.at.toLocaleTimeString()} · {methodLabel}
-            {receipt.reference ? ` · ${receipt.reference}` : ""}
-          </p>
+    <div id="payment-receipt">
+      <Card className="mb-6 border-teal-300 bg-teal-50/50">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="hidden text-center text-lg font-bold text-zinc-900 print:block">
+              CareFlow Clinic
+            </p>
+            <h2 className="text-sm font-semibold text-teal-900 print:mt-2 print:text-zinc-900">
+              Payment received — visit closed
+            </h2>
+            <p className="mt-1 text-xs text-teal-700">
+              {receipt.patient} ({receipt.mrn}) ·{" "}
+              {receipt.at.toLocaleTimeString()} · {methodLabel}
+              {receipt.reference ? ` · ${receipt.reference}` : ""}
+            </p>
+          </div>
+          <div className="flex gap-2 print:hidden">
+            <Button size="sm" variant="secondary" onClick={() => window.print()}>
+              <PrinterIcon className="size-4" />
+              Print receipt
+            </Button>
+            <Button size="sm" variant="ghost" onClick={onDismiss}>
+              Dismiss
+            </Button>
+          </div>
         </div>
-        <div className="flex gap-2 print:hidden">
-          <Button size="sm" variant="secondary" onClick={() => window.print()}>
-            <PrinterIcon className="size-4" />
-            Print receipt
-          </Button>
-          <Button size="sm" variant="ghost" onClick={onDismiss}>
-            Dismiss
-          </Button>
-        </div>
-      </div>
-      <ul className="mt-3 flex flex-col gap-1 text-sm text-zinc-700">
-        {receipt.items.map((item, i) => (
-          <li key={i} className="flex justify-between">
-            <span>
-              {item.name} × {item.quantity}
-            </span>
-            <span>{money(item.quantity * item.unitPrice)}</span>
+        <ul className="mt-3 flex flex-col gap-1 text-sm text-zinc-700">
+          {receipt.items.map((item, i) => (
+            <li key={i} className="flex justify-between">
+              <span>
+                {item.name} × {item.quantity}
+              </span>
+              <span>{money(item.quantity * item.unitPrice)}</span>
+            </li>
+          ))}
+          <li className="mt-1 flex justify-between border-t border-teal-200 pt-2 font-semibold">
+            <span>Total paid</span>
+            <span>{money(receipt.total)}</span>
           </li>
-        ))}
-        <li className="mt-1 flex justify-between border-t border-teal-200 pt-2 font-semibold">
-          <span>Total paid</span>
-          <span>{money(receipt.total)}</span>
-        </li>
-      </ul>
-    </Card>
+        </ul>
+      </Card>
+    </div>
   );
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { checkoutVisit, useClinic } from "@/lib/store";
+import { useState } from "react";
+import { checkoutVisit, dispenseAndClose, useClinic } from "@/lib/store";
 import type {
   ID,
   Medicine,
@@ -16,16 +16,19 @@ import {
   Field,
   LocationBadge,
   PageHeader,
+  cn,
   inputClass,
 } from "@/components/ui";
 import {
+  chargesTotal,
   ordersForVisit,
+  outstandingCharges,
   patientMap,
   patientName,
   visitLocation,
   visitsByStatus,
 } from "@/lib/selectors";
-import { notify } from "@/lib/toast";
+import { StkBanner, useStkEnabled, useStkPush } from "@/components/MpesaPrompt";
 
 const METHODS: { key: PaymentMethod; label: string }[] = [
   { key: "cash", label: "Cash" },
@@ -54,14 +57,8 @@ export default function PharmacyPage() {
   const pmap = patientMap(data);
   const queue = visitsByStatus(data, "awaiting-pharmacy");
   const [receipt, setReceipt] = useState<Receipt | null>(null);
-  // Daraja credentials present? If not, M-Pesa falls back to manual entry.
-  const [stkEnabled, setStkEnabled] = useState(false);
-  useEffect(() => {
-    fetch("/api/mpesa/stkpush")
-      .then((r) => r.json())
-      .then((b: { configured?: boolean }) => setStkEnabled(!!b.configured))
-      .catch(() => setStkEnabled(false));
-  }, []);
+  // PayHero credentials present? If not, M-Pesa falls back to manual entry.
+  const stkEnabled = useStkEnabled();
 
   return (
     <div>
@@ -99,18 +96,6 @@ export default function PharmacyPage() {
 
 /** One patient's point of sale: the doctor's prescription as a reference,
  *  a catalog search, a cart, and checkout. */
-type StkState = {
-  id: string; // CheckoutRequestID
-  status: "pending" | "success" | "failed";
-  startedAt: number; // when the push was requested, for the polling backstop
-  receipt?: string;
-  detail?: string;
-};
-
-// The server settles stale pushes after 2 minutes; this backstop only fires
-// if the status endpoint itself is unreachable and keeps reporting pending.
-const STK_CLIENT_TIMEOUT_MS = 3 * 60_000;
-
 function PosCard({
   visit,
   patientLabel,
@@ -132,7 +117,6 @@ function PosCard({
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [reference, setReference] = useState("");
   const [phone, setPhone] = useState("");
-  const [stk, setStk] = useState<StkState | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -163,12 +147,26 @@ function PosCard({
   const cartLines = [...cart.entries()]
     .map(([id, qty]) => ({ med: catalog.get(id), qty }))
     .filter((l): l is { med: Medicine; qty: number } => !!l.med);
-  const total = cartLines.reduce((s, l) => s + l.qty * l.med.unitPrice, 0);
+  const cartTotal = cartLines.reduce((s, l) => s + l.qty * l.med.unitPrice, 0);
+
+  // Everything the patient still owes from earlier stages. In per-stage
+  // billing this is empty (reception already collected); in pay-at-end it is
+  // the consultation and any tests, all settled here in one go.
+  const owed = outstandingCharges(visit);
+  const total = cartTotal + chargesTotal(owed);
+
   const inStock = cartLines.every((l) => l.qty <= l.med.stock);
   const stkFlow = method === "mpesa" && stkEnabled;
   const needsReference = method !== "cash" && !stkFlow;
+  // A patient who was never prescribed anything still has to settle their
+  // bill, so an empty cart is fine as long as something is outstanding.
+  const hasSomethingToSettle = cartLines.length > 0 || owed.length > 0;
+  // …and a patient who paid at every gate and was prescribed nothing has no
+  // money left to take: the desk just closes them out. A prescription with an
+  // empty cart is never this case — those medicines still have to be sold.
+  const nothingToCollect = !hasSomethingToSettle && prescribed.length === 0;
   const ready =
-    cartLines.length > 0 &&
+    hasSomethingToSettle &&
     inStock &&
     (!needsReference || reference.trim() !== "");
 
@@ -189,11 +187,20 @@ function PosCard({
     onPaid({
       patient: patientLabel,
       mrn,
-      items: cartLines.map((l) => ({
-        name: medicineLabel(l.med),
-        quantity: l.qty,
-        unitPrice: l.med.unitPrice,
-      })),
+      items: [
+        // Earlier stages first — the receipt then reads in the order the
+        // patient actually ran the charges up.
+        ...owed.map((c) => ({
+          name: c.description,
+          quantity: 1,
+          unitPrice: c.amount,
+        })),
+        ...cartLines.map((l) => ({
+          name: medicineLabel(l.med),
+          quantity: l.qty,
+          unitPrice: l.med.unitPrice,
+        })),
+      ],
       total,
       method,
       reference: shownReference ?? serverReference ?? reference.trim(),
@@ -201,108 +208,42 @@ function PosCard({
     });
   };
 
-  // Ask Daraja to pop the PIN prompt on the customer's phone.
-  const requestStk = async () => {
-    setError(null);
+  /** Close a visit with nothing to dispense and nothing left to pay. The
+   *  server refuses if anything is still outstanding, so no bill can be
+   *  walked out of here. */
+  const closeWithoutSale = async () => {
     setBusy(true);
-    try {
-      const res = await fetch("/api/mpesa/stkpush", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          phone,
-          accountReference: mrn || "CareFlow",
-          items: cartLines.map((l) => ({
-            medicineId: l.med.id,
-            quantity: l.qty,
-          })),
-        }),
-      });
-      const body = (await res.json()) as {
-        checkoutRequestId?: string;
-        reused?: boolean;
-        error?: string;
-      };
-      if (!res.ok || !body.checkoutRequestId) {
-        const message = body.error ?? "M-Pesa request failed.";
-        setError(message);
-        notify("error", message);
-      } else {
-        setStk({
-          id: body.checkoutRequestId,
-          status: "pending",
-          startedAt: Date.now(),
-        });
-        notify(
-          "success",
-          body.reused
-            ? "This amount was already paid from that phone — reusing the payment."
-            : "M-Pesa request sent.",
-        );
-      }
-    } catch {
-      const message = "M-Pesa request failed — check your connection.";
-      setError(message);
-      notify("error", message);
-    } finally {
-      setBusy(false);
-    }
+    setError(null);
+    const { error: err } = await dispenseAndClose(visit.id);
+    setBusy(false);
+    if (err) setError(err);
   };
 
-  // While the STK push is pending, poll until Daraja settles it.
-  useEffect(() => {
-    if (!stk || stk.status !== "pending") return;
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const tick = async () => {
-      if (Date.now() - stk.startedAt > STK_CLIENT_TIMEOUT_MS) {
-        setStk({
-          ...stk,
-          status: "failed",
-          detail: "no response from M-Pesa",
-        });
-        notify("error", "M-Pesa confirmation timed out.");
-        return;
-      }
-      try {
-        const res = await fetch(`/api/mpesa/status?id=${stk.id}`);
-        const body = (await res.json()) as {
-          status?: string;
-          receipt?: string;
-          detail?: string;
-        };
-        if (cancelled) return;
-        if (body.status === "success" || body.status === "failed") {
-          setStk({
-            ...stk,
-            status: body.status,
-            receipt: body.receipt,
-            detail: body.detail,
-          });
-          if (body.status === "success") {
-              notify("success", "Payment confirmed. Money received on M-Pesa.");
-            // Payment confirmed → finish the sale automatically.
-            void checkout(stk.id, body.receipt ?? stk.id);
-          } else {
-              notify(
-                "error",
-                body.detail ?? "Payment failed or not confirmed. No money was received.",
-              );
-          }
-          return;
-        }
-      } catch {
-        // transient — keep polling
-      }
-      if (!cancelled) timer = setTimeout(tick, 3000);
-    };
-    timer = setTimeout(tick, 3000);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [stk]);
+  // Payment confirmed on the customer's phone → finish the sale automatically.
+  const {
+    stk,
+    busy: stkBusy,
+    error: stkError,
+    request,
+    reset: resetStk,
+  } = useStkPush((checkoutRequestId, receipt) =>
+    void checkout(checkoutRequestId, receipt),
+  );
+
+  const requestStk = () =>
+    void request({
+      phone,
+      accountReference: mrn || "CareFlow",
+      // The server re-prices the cart and adds whatever the visit still owes,
+      // so the pushed amount always matches what checkout expects.
+      visitId: visit.id,
+      items: cartLines.map((l) => ({
+        medicineId: l.med.id,
+        quantity: l.qty,
+      })),
+    });
+
+  const shownError = error ?? stkError;
 
   return (
     <Card>
@@ -385,11 +326,14 @@ function PosCard({
           <h3 className="mb-2 text-sm font-semibold text-zinc-700">
             Cart ({cartLines.length})
           </h3>
-          {cartLines.length === 0 ? (
+          {cartLines.length === 0 && (
             <p className="rounded-lg bg-zinc-50 px-3 py-6 text-center text-sm text-zinc-500">
-              Search the shelf and add medicines to the cart.
+              {owed.length > 0
+                ? "Nothing to dispense — you can still settle the bill below."
+                : "Search the shelf and add medicines to the cart."}
             </p>
-          ) : (
+          )}
+          {cartLines.length > 0 && (
             <ul className="flex flex-col gap-1 text-sm">
               {cartLines.map(({ med, qty }) => (
                 <li
@@ -427,21 +371,61 @@ function PosCard({
                   </Button>
                 </li>
               ))}
-              <li className="mt-1 flex justify-between border-t border-zinc-200 px-3 pt-2 text-base font-semibold">
-                <span>Total due</span>
-                <span className="text-teal-700">{money(total)}</span>
-              </li>
             </ul>
           )}
 
-          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+          {/* Charges run up earlier in the visit. Only pay-at-end patients
+              reach the POS still owing for these. */}
+          {owed.length > 0 && (
+            <div className="mt-3">
+              <h4 className="mb-1 text-xs font-semibold uppercase tracking-wide text-amber-700">
+                Owing from earlier
+              </h4>
+              <ul className="flex flex-col gap-1 text-sm">
+                {owed.map((c) => (
+                  <li
+                    key={c.id}
+                    className="flex justify-between rounded-lg bg-amber-50 px-3 py-2"
+                  >
+                    <span className="text-amber-900">{c.description}</span>
+                    <span className="tabular-nums text-amber-900">
+                      {money(c.amount)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {hasSomethingToSettle && (
+            <div className="mt-2 flex justify-between border-t border-zinc-200 px-3 pt-2 text-base font-semibold">
+              <span>Total due</span>
+              <span className="tabular-nums text-teal-700">{money(total)}</span>
+            </div>
+          )}
+
+          {/* Nothing to dispense and nothing owed — there is no payment to
+              take, so the till hides itself and just offers the exit. */}
+          {nothingToCollect && (
+            <p className="mt-3 rounded-lg bg-zinc-50 p-3 text-sm text-zinc-600">
+              Nothing was prescribed and the bill is fully settled — there is no
+              money left to take.
+            </p>
+          )}
+
+          <div
+            className={cn(
+              "mt-3 grid gap-3 sm:grid-cols-2",
+              nothingToCollect && "hidden",
+            )}
+          >
             <Field label="Payment method">
               <select
                 className={inputClass}
                 value={method}
                 onChange={(e) => {
                   setMethod(e.target.value as PaymentMethod);
-                  setStk(null);
+                  resetStk();
                   setError(null);
                 }}
               >
@@ -482,66 +466,62 @@ function PosCard({
             )}
           </div>
 
-          {error && (
+          {shownError && (
             <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-              {error}
+              {shownError}
             </p>
           )}
 
-          {stkFlow && stk?.status === "pending" && (
-            <div className="mt-3 flex items-center justify-between rounded-lg bg-amber-50 p-3 text-sm text-amber-800">
-              <span className="animate-pulse">
-                Request sent to {phone} — waiting for the customer to enter
-                their M-Pesa PIN…
-              </span>
-              <Button size="sm" variant="ghost" onClick={() => setStk(null)}>
-                Cancel
-              </Button>
-            </div>
-          )}
-          {stkFlow && stk?.status === "success" && (
-            <p className="mt-3 rounded-lg bg-teal-50 p-3 text-sm text-teal-800">
-              Payment confirmed and money received
-              {stk.receipt ? ` (${stk.receipt})` : ""} —{" "}
-              {error ? (
-                <>
-                  the visit did not close.{" "}
-                  <button
-                    className="underline"
-                    disabled={busy}
-                    onClick={() => void checkout(stk.id, stk.receipt ?? stk.id)}
-                  >
-                    Retry closing the visit
-                  </button>
-                </>
-              ) : (
-                "closing the visit…"
-              )}
-            </p>
-          )}
-          {stkFlow && stk?.status === "failed" && (
-            <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
-              Payment failed or not confirmed: {stk.detail ?? "no money received"}.{" "}
-              <button className="underline" onClick={() => setStk(null)}>
-                Try again
-              </button>
-            </p>
+          {stkFlow && stk && (
+            <StkBanner
+              stk={stk}
+              phone={phone}
+              onReset={resetStk}
+              success={
+                error ? (
+                  <>
+                    the visit did not close.{" "}
+                    <button
+                      className="underline"
+                      disabled={busy}
+                      onClick={() =>
+                        void checkout(stk.id, stk.receipt ?? stk.id)
+                      }
+                    >
+                      Retry closing the visit
+                    </button>
+                  </>
+                ) : (
+                  "closing the visit…"
+                )
+              }
+            />
           )}
 
-          {stkFlow ? (
+          {nothingToCollect ? (
+            <Button
+              className="mt-4 w-full"
+              variant="secondary"
+              disabled={busy}
+              onClick={closeWithoutSale}
+            >
+              {busy ? "Closing…" : "Close visit — nothing to collect"}
+            </Button>
+          ) : stkFlow ? (
             <Button
               className="mt-4 w-full"
               disabled={
                 !ready ||
                 busy ||
+                stkBusy ||
                 !phone.trim() ||
                 stk?.status === "pending" ||
                 stk?.status === "success"
               }
               onClick={requestStk}
             >
-              {cartLines.length === 0
-                ? "Add medicines to the cart first"
+              {!hasSomethingToSettle
+                ? "Add the prescribed medicines to the cart"
                 : !inStock
                   ? "Not enough stock for the cart"
                   : !phone.trim()
@@ -556,8 +536,8 @@ function PosCard({
               disabled={!ready || busy}
               onClick={() => checkout()}
             >
-              {cartLines.length === 0
-                ? "Add medicines to the cart first"
+              {!hasSomethingToSettle
+                ? "Add the prescribed medicines to the cart"
                 : !inStock
                   ? "Not enough stock for the cart"
                   : needsReference && !reference.trim()

@@ -10,9 +10,11 @@ export type ID = string;
 /** Where the patient physically is in their journey right now. */
 export type VisitStatus =
   | "awaiting-triage" // registered, nurse to take vitals
-  | "waiting" // triaged, waiting for the doctor
+  | "awaiting-consult-payment" // per-stage mode: pay consultation fee before doctor
+  | "waiting" // triaged (and paid, if per-stage), waiting for the doctor
   | "with-doctor" // doctor is consulting
-  | "awaiting-services" // doctor ordered lab/radiology/procedure
+  | "awaiting-lab-payment" // per-stage mode: pay for ordered lab tests
+  | "awaiting-services" // paid (or pay-at-end): lab/radiology/procedure runs
   | "back-to-doctor" // services done, doctor reviews results
   | "awaiting-pharmacy" // doctor finalized, meds to dispense
   | "completed"; // visit closed
@@ -70,7 +72,12 @@ export interface Visit {
   assignedDoctorId?: ID; // which doctor this visit is routed to
   status: VisitStatus;
   timeline?: StageEvent[]; // timestamped status history, check-in → completed
-  payment?: Payment; // set when the pharmacy POS closes the visit
+  /** Snapshotted at check-in — a mid-visit toggle on the clinic settings must
+   *  not retroactively change how this visit is charged. */
+  billingMode: BillingMode;
+  charges: Charge[]; // every billable line accumulated during the visit
+  payments: VisitPayment[]; // every payment event on the visit
+  payment?: Payment; // legacy: single lump payment (old records only)
   saleItems?: SaleItem[]; // what the pharmacy actually sold at checkout
   createdAt: string;
   updatedAt: string;
@@ -129,12 +136,53 @@ export interface Expense {
 
 export type PaymentMethod = "cash" | "mpesa" | "card";
 
-/** Recorded at the pharmacy POS when the visit is paid for and closed. */
+/** Legacy shape — a single lump payment recorded at the pharmacy POS. Kept for
+ *  old records; new visits use `payments` + `charges` instead. */
 export interface Payment {
   amount: number;
   method: PaymentMethod;
   reference?: string; // e.g. M-Pesa transaction code
   paidAt: string;
+}
+
+/** How a visit is billed end-to-end. */
+export type BillingMode = "per-stage" | "pay-at-end";
+
+/** What kind of billable line a Charge represents. Service charges carry the
+ *  ordering department so a bill reads the way the patient experienced it. */
+export type ChargeType =
+  | "consultation"
+  | "lab"
+  | "radiology"
+  | "procedure"
+  | "pharmacy"
+  | "misc";
+
+/** One billable line on a visit. Added as the patient moves through:
+ *  consultation fee at check-in, one per service ordered, one per medicine
+ *  sold, misc for injections / dressings / bed fees. `paid` is toggled by a
+ *  VisitPayment. */
+export interface Charge {
+  id: ID;
+  type: ChargeType;
+  description: string;
+  amount: number;
+  paid: boolean;
+  paidAt?: string;
+  paymentId?: ID; // id of the VisitPayment that settled this charge
+  createdAt: string;
+}
+
+/** One payment event on a visit. per-stage visits have several; pay-at-end
+ *  visits typically have one at pharmacy covering all outstanding charges. */
+export interface VisitPayment {
+  id: ID;
+  amount: number;
+  method: PaymentMethod;
+  reference?: string;
+  paidAt: string;
+  covers: ID[]; // Charge ids settled by this payment
+  takenBy?: string; // staff username who took the payment
 }
 
 /**
@@ -150,10 +198,56 @@ export interface Order {
   title: string; // e.g. "Chest X-ray", "CBC", "Wound dressing"
   instructions?: string;
   status: OrderStatus;
-  result?: string; // filled by lab/radiology/procedure
+  /** Which catalog service was ordered — supplies the price and, for labs, the
+   *  parameter panel. Prescriptions leave this unset. */
+  serviceItemId?: ID;
+  /** Structured results — one entry per parameter. Lab orders use this; radiology
+   *  and procedure still use the free-text `result` below. */
+  results?: LabResult[];
+  result?: string; // filled by radiology/procedure (free-text)
   meds?: Med[]; // only for type === "prescription"
   createdAt: string;
   completedAt?: string;
+}
+
+/** One parameter of a lab test's result panel, with the reference range the
+ *  lab flags against. */
+export interface LabParameter {
+  name: string; // e.g. "WBC"
+  unit: string; // e.g. "10^9/L"
+  refLow?: number;
+  refHigh?: number;
+}
+
+/** One measured value entered by the lab. Stored as string so qualitative
+ *  results ("positive"/"negative") work alongside numeric ones. */
+export interface LabResult {
+  parameter: string;
+  value: string;
+  flag?: "low" | "high" | "normal";
+}
+
+/** A billable service the clinic offers — lab tests, imaging and procedures.
+ *  Doctors order from this catalog; the picked item supplies the price (which
+ *  becomes a Charge) and, for labs, the technician's parameter entry form. */
+export interface ServiceItem {
+  id: ID;
+  name: string;
+  orderType: Exclude<OrderType, "prescription">; // which station runs it
+  category: string; // haematology | biochemistry | microbiology | serology | urinalysis | imaging | other
+  price: number;
+  parameters: LabParameter[]; // empty for radiology / procedure
+  active: boolean;
+  createdAt: string;
+}
+
+/** Singleton clinic-wide settings. */
+export interface ClinicSettings {
+  id: ID;
+  billingMode: BillingMode;
+  consultationFee: number;
+  updatedAt: string;
+  updatedById?: ID;
 }
 
 /** A daily physical cash count entered by an admin, reconciled against the
@@ -184,6 +278,8 @@ export interface ClinicData {
   visits: Visit[];
   orders: Order[];
   medicines: Medicine[];
+  serviceCatalog: ServiceItem[]; // priced lab / radiology / procedure catalog
+  settings: ClinicSettings; // clinic-wide billing mode + consultation fee
   expenses: Expense[]; // admin-only; empty for other roles
   cashCounts: CashCount[]; // admin-only; empty for other roles
   mpesaTransactions: MpesaTxn[]; // admin-only; empty for other roles

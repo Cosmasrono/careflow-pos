@@ -7,6 +7,7 @@
 import { useMemo, useState } from "react";
 import { PrinterIcon } from "lucide-react";
 import { addExpense, deleteExpense, useClinic } from "@/lib/store";
+import { paymentsOf } from "@/lib/selectors";
 import type { Expense, ExpenseCategory } from "@/lib/types";
 import {
   Button,
@@ -74,11 +75,14 @@ export default function AccountingPage() {
     const start = periodStart(period);
     const inPeriod = (iso: string) => new Date(iso).getTime() >= start;
 
-    // Revenue and cost of goods sold, from paid visits in the period.
-    const paid = data.visits.filter(
-      (v) => v.payment && inPeriod(v.payment.paidAt),
-    );
-    const revenue = paid.reduce((s, v) => s + (v.payment?.amount ?? 0), 0);
+    // Revenue and cost of goods sold, from money taken in the period. Every
+    // payment on a visit counts, not just the one that closed it — per-stage
+    // patients pay for the consultation and their labs along the way.
+    const takings = data.visits
+      .flatMap((v) => paymentsOf(v).map((payment) => ({ visit: v, payment })))
+      .filter((t) => inPeriod(t.payment.paidAt));
+    const paid = [...new Set(takings.map((t) => t.visit))];
+    const revenue = takings.reduce((s, t) => s + t.payment.amount, 0);
     let cogs = 0;
     let missingCost = false;
     for (const v of paid) {

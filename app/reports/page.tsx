@@ -7,7 +7,7 @@
 import { useMemo, useState } from "react";
 import { useClinic } from "@/lib/store";
 import { Card, PageHeader, EmptyState, cn } from "@/components/ui";
-import { formatDuration } from "@/lib/selectors";
+import { formatDuration, paymentsOf } from "@/lib/selectors";
 import type { OrderType, PaymentMethod, Visit } from "@/lib/types";
 
 type Period = "today" | "7d" | "30d" | "all";
@@ -64,19 +64,23 @@ export default function ReportsPage() {
 
     const visits = data.visits.filter((v) => inPeriod(v.createdAt));
     const completed = visits.filter((v) => v.status === "completed");
-    const paid = data.visits.filter(
-      (v) => v.payment && inPeriod(v.payment.paidAt),
-    );
+
+    // Every payment taken in the period, flattened out of the visits holding
+    // them. A per-stage visit pays several times — counting only the closing
+    // payment would lose all the consultation and lab money.
+    const takings = data.visits
+      .flatMap((v) => paymentsOf(v).map((payment) => ({ visit: v, payment })))
+      .filter((t) => inPeriod(t.payment.paidAt));
+    const paid = [...new Set(takings.map((t) => t.visit))];
 
     // Revenue
-    const revenue = paid.reduce((sum, v) => sum + (v.payment?.amount ?? 0), 0);
+    const revenue = takings.reduce((sum, t) => sum + t.payment.amount, 0);
     const byMethod = new Map<PaymentMethod, { count: number; amount: number }>();
-    for (const v of paid) {
-      const p = v.payment!;
-      const entry = byMethod.get(p.method) ?? { count: 0, amount: 0 };
+    for (const { payment } of takings) {
+      const entry = byMethod.get(payment.method) ?? { count: 0, amount: 0 };
       entry.count += 1;
-      entry.amount += p.amount;
-      byMethod.set(p.method, entry);
+      entry.amount += payment.amount;
+      byMethod.set(payment.method, entry);
     }
 
     // Daily revenue for the bar chart (last 14 days regardless of period,
@@ -88,13 +92,17 @@ export default function ReportsPage() {
       d.setDate(d.getDate() - i);
       const dayStart = new Date(d.getFullYear(), d.getMonth(), d.getDate());
       const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
-      const amount = data.visits.reduce((sum, v) => {
-        if (!v.payment) return sum;
-        const at = new Date(v.payment.paidAt).getTime();
-        return at >= dayStart.getTime() && at < dayEnd.getTime()
-          ? sum + v.payment.amount
-          : sum;
-      }, 0);
+      const amount = data.visits.reduce(
+        (sum, v) =>
+          sum +
+          paymentsOf(v).reduce((s, p) => {
+            const at = new Date(p.paidAt).getTime();
+            return at >= dayStart.getTime() && at < dayEnd.getTime()
+              ? s + p.amount
+              : s;
+          }, 0),
+        0,
+      );
       daily.push({
         label: dayStart.toLocaleDateString("en-KE", {
           day: "numeric",

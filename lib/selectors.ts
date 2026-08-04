@@ -2,6 +2,7 @@
 // These are pure functions, easy to unit test, and keep the components clean.
 
 import type {
+  Charge,
   ClinicData,
   Doctor,
   ID,
@@ -9,6 +10,7 @@ import type {
   Patient,
   Priority,
   Visit,
+  VisitPayment,
   VisitStatus,
 } from "./types";
 
@@ -17,8 +19,12 @@ import type {
 // unbounded — reception balances load using the counts shown in the picker.
 export const OCCUPYING_STATUSES: VisitStatus[] = [
   "awaiting-triage",
+  // A patient held at a pay-gate is still in the clinic and still that
+  // doctor's — leaving these out would quietly shrink their queue count.
+  "awaiting-consult-payment",
   "waiting",
   "with-doctor",
+  "awaiting-lab-payment",
   "awaiting-services",
   "back-to-doctor",
 ];
@@ -38,9 +44,9 @@ export type VisitLocation =
 export const LOCATION_LABELS: Record<VisitLocation, string> = {
   reception: "Reception",
   consultation: "In consultation",
-  lab: "onLab",
-  radiology: "onRadiology",
-  procedure: "onProcedure",
+  lab: "In lab",
+  radiology: "In radiology",
+  procedure: "In procedure",
   pharmacy: "In pharmacy",
   completed: "Completed",
 };
@@ -51,6 +57,10 @@ export const LOCATION_LABELS: Record<VisitLocation, string> = {
 export function visitLocation(data: ClinicData, visit: Visit): VisitLocation {
   switch (visit.status) {
     case "awaiting-triage":
+    // Consultation and lab pay-gates are physically at the cashier /
+    // reception desk — the patient hasn't moved on yet.
+    case "awaiting-consult-payment":
+    case "awaiting-lab-payment":
       return "reception";
     // "waiting" = triage finished and the patient was sent to the doctor's
     // queue — staff see them at consultation from that moment.
@@ -74,6 +84,53 @@ export function visitLocation(data: ClinicData, visit: Visit): VisitLocation {
     case "completed":
       return "completed";
   }
+}
+
+// --- billing ----------------------------------------------------------------
+
+/** The two statuses where a patient is held until they pay. */
+export const PAY_GATE_STATUSES: VisitStatus[] = [
+  "awaiting-consult-payment",
+  "awaiting-lab-payment",
+];
+
+/** Charges still owed on this visit, oldest first. */
+export function outstandingCharges(visit: Visit): Charge[] {
+  return (visit.charges ?? []).filter((c) => !c.paid);
+}
+
+export function chargesTotal(charges: Charge[]): number {
+  return Math.round(charges.reduce((s, c) => s + c.amount, 0) * 100) / 100;
+}
+
+/** What this visit still owes, all stages combined. */
+export function outstandingTotal(visit: Visit): number {
+  return chargesTotal(outstandingCharges(visit));
+}
+
+/** Every payment taken on a visit. Visits closed before per-stage billing
+ *  existed only have the single legacy `payment`, so fall back to it — that
+ *  keeps historical revenue reporting identical. */
+export function paymentsOf(visit: Visit): VisitPayment[] {
+  if (visit.payments?.length) return visit.payments;
+  if (!visit.payment) return [];
+  return [
+    {
+      id: visit.id,
+      amount: visit.payment.amount,
+      method: visit.payment.method,
+      reference: visit.payment.reference,
+      paidAt: visit.payment.paidAt,
+      covers: [],
+    },
+  ];
+}
+
+/** Visits waiting at a cashier gate, oldest first — reception's payment queue. */
+export function visitsAwaitingPayment(data: ClinicData): Visit[] {
+  return data.visits
+    .filter((v) => PAY_GATE_STATUSES.includes(v.status))
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 // --- visit timing -----------------------------------------------------------
@@ -222,5 +279,8 @@ export function openServiceOrders(
     .map((order) => {
       const visit = vmap.get(order.visitId);
       return { order, visit, patient: visit && pmap.get(visit.patientId) };
-    });
+    })
+    // In per-stage mode the patient is still at the cashier — the test isn't
+    // authorised yet, so it must not appear on the technician's bench.
+    .filter(({ visit }) => visit?.status !== "awaiting-lab-payment");
 }

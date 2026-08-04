@@ -44,6 +44,139 @@ const MEDICINES: {
   { name: "Vitamin B complex", strength: "—", form: "tablet", unitPrice: 5, stock: 300 },
 ];
 
+// Priced catalog of services the doctor can order. Labs carry the parameter
+// panel the technician fills in, with the reference ranges results are flagged
+// against; radiology and procedures report a free-text finding instead.
+const SERVICES: {
+  name: string;
+  orderType: "lab" | "radiology" | "procedure";
+  category: string;
+  price: number;
+  parameters?: {
+    name: string;
+    unit: string;
+    refLow?: number;
+    refHigh?: number;
+  }[];
+}[] = [
+  {
+    name: "Full haemogram (CBC)",
+    orderType: "lab",
+    category: "haematology",
+    price: 500,
+    parameters: [
+      { name: "WBC", unit: "10^9/L", refLow: 4, refHigh: 11 },
+      { name: "RBC", unit: "10^12/L", refLow: 4.5, refHigh: 5.9 },
+      { name: "Haemoglobin", unit: "g/dL", refLow: 12, refHigh: 16 },
+      { name: "Haematocrit", unit: "%", refLow: 36, refHigh: 48 },
+      { name: "Platelets", unit: "10^9/L", refLow: 150, refHigh: 450 },
+    ],
+  },
+  {
+    name: "Malaria RDT",
+    orderType: "lab",
+    category: "microbiology",
+    price: 300,
+    parameters: [{ name: "Result", unit: "" }], // positive / negative
+  },
+  {
+    name: "Malaria microscopy (BS)",
+    orderType: "lab",
+    category: "microbiology",
+    price: 350,
+    parameters: [
+      { name: "Parasites seen", unit: "" },
+      { name: "Parasite density", unit: "/µL" },
+    ],
+  },
+  {
+    name: "Urinalysis",
+    orderType: "lab",
+    category: "urinalysis",
+    price: 300,
+    parameters: [
+      { name: "Colour", unit: "" },
+      { name: "Protein", unit: "" },
+      { name: "Glucose", unit: "" },
+      { name: "Leucocytes", unit: "/hpf" },
+      { name: "Pus cells", unit: "/hpf" },
+    ],
+  },
+  {
+    name: "Blood sugar (RBS)",
+    orderType: "lab",
+    category: "biochemistry",
+    price: 200,
+    parameters: [{ name: "Glucose", unit: "mmol/L", refLow: 3.9, refHigh: 7.8 }],
+  },
+  {
+    name: "Urea, electrolytes & creatinine",
+    orderType: "lab",
+    category: "biochemistry",
+    price: 1800,
+    parameters: [
+      { name: "Sodium", unit: "mmol/L", refLow: 135, refHigh: 145 },
+      { name: "Potassium", unit: "mmol/L", refLow: 3.5, refHigh: 5.1 },
+      { name: "Urea", unit: "mmol/L", refLow: 2.5, refHigh: 7.1 },
+      { name: "Creatinine", unit: "µmol/L", refLow: 62, refHigh: 115 },
+    ],
+  },
+  {
+    name: "Liver function test",
+    orderType: "lab",
+    category: "biochemistry",
+    price: 2000,
+    parameters: [
+      { name: "ALT", unit: "U/L", refLow: 7, refHigh: 56 },
+      { name: "AST", unit: "U/L", refLow: 10, refHigh: 40 },
+      { name: "Total bilirubin", unit: "µmol/L", refLow: 5, refHigh: 21 },
+      { name: "Albumin", unit: "g/L", refLow: 35, refHigh: 50 },
+    ],
+  },
+  {
+    name: "HIV rapid test",
+    orderType: "lab",
+    category: "serology",
+    price: 0, // free under the national programme
+    parameters: [{ name: "Result", unit: "" }],
+  },
+  {
+    name: "Widal test",
+    orderType: "lab",
+    category: "serology",
+    price: 500,
+    parameters: [
+      { name: "S. typhi O", unit: "titre" },
+      { name: "S. typhi H", unit: "titre" },
+    ],
+  },
+  {
+    name: "Pregnancy test (hCG)",
+    orderType: "lab",
+    category: "serology",
+    price: 200,
+    parameters: [{ name: "Result", unit: "" }],
+  },
+  { name: "Chest X-ray", orderType: "radiology", category: "imaging", price: 1500 },
+  { name: "Abdominal ultrasound", orderType: "radiology", category: "imaging", price: 2000 },
+  { name: "Obstetric ultrasound", orderType: "radiology", category: "imaging", price: 2500 },
+  { name: "Wound dressing", orderType: "procedure", category: "other", price: 500 },
+  { name: "Suturing (minor)", orderType: "procedure", category: "other", price: 1500 },
+  { name: "Injection administration", orderType: "procedure", category: "other", price: 200 },
+  { name: "Nebulisation", orderType: "procedure", category: "other", price: 800 },
+];
+
+async function ensureServiceCatalog() {
+  if ((await prisma.serviceItem.count()) > 0) {
+    console.log("Service catalog already present — skipping.");
+    return;
+  }
+  await prisma.serviceItem.createMany({
+    data: SERVICES.map((s) => ({ ...s, parameters: s.parameters ?? [] })),
+  });
+  console.log(`Seeded ${SERVICES.length} catalog services.`);
+}
+
 async function ensureMedicines() {
   if ((await prisma.medicine.count()) > 0) {
     console.log("Medicines already present — skipping catalog seed.");
@@ -128,6 +261,7 @@ async function seedDemoPatients() {
 async function main() {
   await ensureStaff();
   await ensureMedicines();
+  await ensureServiceCatalog();
 
   if (process.argv.includes("--reset-demo")) {
     await prisma.order.deleteMany();

@@ -9,6 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import * as repo from "@/lib/server/clinic-repo";
 import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/roles";
+import { paymentsOf } from "@/lib/selectors";
 import type { ClinicData } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -46,18 +47,22 @@ function reconciliationSnapshot(data: ClinicData, from: number, to: number): str
     return t >= from && t <= to;
   };
 
+  // Every payment on every visit — per-stage patients pay reception for the
+  // consultation and their labs long before the pharmacy sees them.
   const mpesaVisits: string[] = [];
   for (const v of data.visits) {
-    if (!v.payment || !inPeriod(v.payment.paidAt)) continue;
-    const d = day(dayOf(v.payment.paidAt));
-    if (v.payment.method === "cash") d.cash += v.payment.amount;
-    else if (v.payment.method === "mpesa") {
-      d.mpesa += v.payment.amount;
-      mpesaVisits.push(
-        `- visit ${v.id.slice(-6)}: KSh ${v.payment.amount} on ${v.payment.paidAt}` +
-          (v.payment.reference ? ` ref ${v.payment.reference}` : " (no reference recorded)"),
-      );
-    } else d.card += v.payment.amount;
+    for (const p of paymentsOf(v)) {
+      if (!inPeriod(p.paidAt)) continue;
+      const d = day(dayOf(p.paidAt));
+      if (p.method === "cash") d.cash += p.amount;
+      else if (p.method === "mpesa") {
+        d.mpesa += p.amount;
+        mpesaVisits.push(
+          `- visit ${v.id.slice(-6)}: KSh ${p.amount} on ${p.paidAt}` +
+            (p.reference ? ` ref ${p.reference}` : " (no reference recorded)"),
+        );
+      } else d.card += p.amount;
+    }
   }
 
   const txnLines: string[] = [];
@@ -101,7 +106,7 @@ function reconciliationSnapshot(data: ClinicData, from: number, to: number): str
 
 const SYSTEM = [
   "You are a financial reconciliation auditor for a small clinic in Kenya.",
-  "You are given: (a) per-day totals of payments recorded at the pharmacy POS split by method,",
+  "You are given: (a) per-day totals of every payment recorded in the clinic (reception pay-gates and the pharmacy POS) split by method,",
   "(b) the physically counted cash per day where an admin entered a count,",
   "(c) every M-Pesa STK transaction with its status, and (d) every visit paid as M-Pesa with its reference.",
   "Your job: state clearly whether the money balances, and if not, find exactly where the variance is.",

@@ -5,6 +5,8 @@ import type {
   ClinicData,
   Gender,
   ID,
+  LabParameter,
+  LabResult,
   Med,
   OrderType,
   Patient,
@@ -21,6 +23,14 @@ const EMPTY: ClinicData = {
   visits: [],
   orders: [],
   medicines: [],
+  serviceCatalog: [],
+  // A placeholder — real settings arrive on the first /api/clinic response.
+  settings: {
+    id: "",
+    billingMode: "per-stage",
+    consultationFee: 0,
+    updatedAt: new Date(0).toISOString(),
+  },
   expenses: [],
   cashCounts: [],
   mpesaTransactions: [],
@@ -61,11 +71,15 @@ const ACTION_SUCCESS_MESSAGES: Record<string, string> = {
   toggleMedDispensed: "Medicine status updated.",
   dispenseAndClose: "Visit closed.",
   checkoutVisit: "Payment recorded and visit closed.",
+  payCharges: "Payment recorded.",
   addMedicine: "Medicine added to catalog.",
   updateMedicine: "Medicine updated.",
+  addServiceItem: "Service added to catalog.",
+  updateServiceItem: "Service updated.",
   addExpense: "Expense recorded.",
   deleteExpense: "Expense deleted.",
   recordCashCount: "Cash count saved.",
+  updateSettings: "Settings updated.",
 };
 
 /** Send a mutation, adopt the fresh dataset, and return it so callers can pick
@@ -186,13 +200,19 @@ export function setVisitComplaint(visitId: ID, complaint: string) {
   return act("setVisitComplaint", { visitId, complaint });
 }
 
-export function addServiceOrder(
+/** Order a service off the catalog. The title and price are resolved from the
+ *  catalog server-side — the client only says which item. */
+export async function addServiceOrder(
   visitId: ID,
-  type: Exclude<OrderType, "prescription">,
-  title: string,
+  serviceItemId: ID,
   instructions?: string,
 ) {
-  return act("addServiceOrder", { visitId, type, title, instructions });
+  const { error } = await act("addServiceOrder", {
+    visitId,
+    serviceItemId,
+    instructions,
+  });
+  return error;
 }
 
 export function addPrescription(
@@ -202,8 +222,14 @@ export function addPrescription(
   return act("addPrescription", { visitId, meds });
 }
 
-export function completeServiceOrder(orderId: ID, result: string) {
-  return act("completeServiceOrder", { orderId, result });
+/** File a result: labs send `results` (one entry per catalog parameter),
+ *  radiology and procedures send free-text `result`. */
+export async function completeServiceOrder(
+  orderId: ID,
+  input: { result?: string; results?: LabResult[] },
+) {
+  const { error } = await act("completeServiceOrder", { orderId, ...input });
+  return error;
 }
 
 export function startServiceOrder(orderId: ID) {
@@ -274,8 +300,56 @@ export async function recordCashCount(input: {
   return error;
 }
 
-/** Pharmacy POS: sell the carted medicines, take payment, close the visit.
- *  Returns an error message on rejection (e.g. out of stock), else null. */
+/** Admin: change the clinic-wide billing mode and/or consultation fee. New
+ *  visits pick up the change; in-flight visits keep their snapshotted mode. */
+export async function updateSettings(input: {
+  billingMode?: "per-stage" | "pay-at-end";
+  consultationFee?: number;
+}) {
+  const { error } = await act("updateSettings", input);
+  return error;
+}
+
+/** Take money for outstanding charges at one of reception's pay-gates. The
+ *  patient is released automatically once the gate is clear. */
+export async function payCharges(input: {
+  visitId: ID;
+  chargeIds: ID[];
+  method: PaymentMethod;
+  reference?: string;
+}) {
+  const { error } = await act("payCharges", input);
+  return error;
+}
+
+/** Admin: add a lab / radiology / procedure to the priced catalog. */
+export async function addServiceItem(input: {
+  name: string;
+  orderType: Exclude<OrderType, "prescription">;
+  category: string;
+  price: number;
+  parameters?: LabParameter[];
+}) {
+  const { error } = await act("addServiceItem", input);
+  return error;
+}
+
+/** Admin: edit a catalog entry. Charges already raised keep their old price. */
+export async function updateServiceItem(input: {
+  id: ID;
+  name: string;
+  orderType: Exclude<OrderType, "prescription">;
+  category: string;
+  price: number;
+  parameters?: LabParameter[];
+  active?: boolean;
+}) {
+  const { error } = await act("updateServiceItem", input);
+  return error;
+}
+
+/** Pharmacy POS: sell the carted medicines, settle everything still owed on
+ *  the visit, and close it. Returns an error message on rejection, else null. */
 export async function checkoutVisit(
   visitId: ID,
   method: PaymentMethod,

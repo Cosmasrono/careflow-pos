@@ -20,10 +20,12 @@ import {
   PageHeader,
   PriorityBadge,
   StatusBadge,
+  cn,
   inputClass,
 } from "@/components/ui";
 import {
   byPriorityThenArrival,
+  chargesTotal,
   doctorMap,
   doctorName,
   doctorQueueCounts,
@@ -311,6 +313,34 @@ function ConsultPanel({ visitId }: { visitId: string }) {
         </div>
       )}
 
+      {/* What the visit has cost so far, so the doctor is never ordering
+          blind against a bill the patient has to settle. */}
+      {(visit.charges ?? []).length > 0 && (
+        <div className="mt-5 rounded-xl border border-zinc-200 bg-zinc-50 p-3">
+          <div className="flex items-center justify-between text-sm">
+            <span className="font-semibold text-zinc-700">Bill so far</span>
+            <span className="tabular-nums font-semibold text-zinc-900">
+              KSh {chargesTotal(visit.charges).toLocaleString("en-KE")}
+            </span>
+          </div>
+          <ul className="mt-2 flex flex-col gap-1 text-xs text-zinc-600">
+            {visit.charges.map((c) => (
+              <li key={c.id} className="flex justify-between gap-3">
+                <span>
+                  {c.description}
+                  {!c.paid && (
+                    <span className="ml-2 text-amber-600">unpaid</span>
+                  )}
+                </span>
+                <span className="tabular-nums">
+                  {c.amount.toLocaleString("en-KE")}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* Existing orders + results */}
       {orders.length > 0 && (
         <div className="mt-5">
@@ -332,6 +362,25 @@ function ConsultPanel({ visitId }: { visitId: string }) {
                   </span>
                   <StatusBadge status={o.status} />
                 </div>
+                {o.results && o.results.length > 0 && (
+                  <ul className="mt-2 flex flex-col gap-0.5 rounded bg-green-50 p-2 text-xs text-green-900">
+                    {o.results.map((r) => (
+                      <li key={r.parameter} className="flex justify-between gap-3">
+                        <span>{r.parameter}</span>
+                        <span
+                          className={cn(
+                            "tabular-nums",
+                            r.flag === "high" && "font-semibold text-red-600",
+                            r.flag === "low" && "font-semibold text-amber-600",
+                          )}
+                        >
+                          {r.value}
+                          {r.flag && r.flag !== "normal" ? ` (${r.flag})` : ""}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
                 {o.result && (
                   <p className="mt-2 rounded bg-green-50 p-2 text-xs text-green-800">
                     Result: {o.result}
@@ -376,17 +425,26 @@ function ConsultPanel({ visitId }: { visitId: string }) {
             <>
               <PrescriptionForm visitId={visitId} />
               <div className="mt-5 border-t border-zinc-100 pt-4">
+                {/* Every patient leaves through the pharmacy, prescription or
+                    not — it is the pay point, and in pay-at-end billing the
+                    consultation and any tests are still owed there. */}
                 <Button
-                  disabled={!canFinalize || !hasPrescription}
+                  disabled={!canFinalize}
                   onClick={finalizeAndSendToPharmacy}
                   className="w-full"
                 >
-                  {hasPrescription
-                    ? canFinalize
+                  {!canFinalize
+                    ? "Waiting for service results…"
+                    : hasPrescription
                       ? "Finalize & send to pharmacy"
-                      : "Waiting for service results…"
-                    : "Add a prescription first"}
+                      : "Finalize & send to pharmacy to settle up"}
                 </Button>
+                {canFinalize && !hasPrescription && (
+                  <p className="mt-2 text-xs text-zinc-500">
+                    Nothing prescribed — the pharmacy desk collects whatever is
+                    still owed and closes the visit.
+                  </p>
+                )}
               </div>
             </>
           )}
@@ -433,16 +491,27 @@ function ComplaintEditor({
   );
 }
 
+/** Services are ordered off the priced catalog rather than typed free-hand:
+ *  the price is what the patient will be charged, so the doctor sees the cost
+ *  of what they are ordering before they order it. */
 function ServiceOrderForm({ visitId }: { visitId: string }) {
+  const data = useClinic();
   const [type, setType] = useState<Exclude<OrderType, "prescription">>("lab");
-  const [title, setTitle] = useState("");
+  const [serviceItemId, setServiceItemId] = useState("");
   const [instructions, setInstructions] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  const submit = (e: React.FormEvent) => {
+  const available = data.serviceCatalog.filter((s) => s.orderType === type);
+  const picked = available.find((s) => s.id === serviceItemId);
+
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
-    addServiceOrder(visitId, type, title, instructions);
-    setTitle("");
+    if (!picked) return;
+    setBusy(true);
+    const error = await addServiceOrder(visitId, picked.id, instructions);
+    setBusy(false);
+    if (error) return;
+    setServiceItemId("");
     setInstructions("");
   };
 
@@ -453,7 +522,10 @@ function ServiceOrderForm({ visitId }: { visitId: string }) {
         <select
           className={inputClass}
           value={type}
-          onChange={(e) => setType(e.target.value as typeof type)}
+          onChange={(e) => {
+            setType(e.target.value as typeof type);
+            setServiceItemId(""); // the old pick belongs to the old department
+          }}
         >
           <option value="lab">Lab</option>
           <option value="radiology">Radiology</option>
@@ -461,12 +533,26 @@ function ServiceOrderForm({ visitId }: { visitId: string }) {
         </select>
       </Field>
       <Field label="Test / procedure">
-        <input
-          className={inputClass}
-          placeholder="e.g. CBC, Chest X-ray, Wound dressing"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-        />
+        {available.length === 0 ? (
+          <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
+            Nothing in the catalog for this department yet — an admin adds
+            these under Service catalog.
+          </p>
+        ) : (
+          <select
+            className={inputClass}
+            value={serviceItemId}
+            onChange={(e) => setServiceItemId(e.target.value)}
+          >
+            <option value="">Choose…</option>
+            {available.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+                {s.price > 0 ? ` — KSh ${s.price.toLocaleString("en-KE")}` : " — free"}
+              </option>
+            ))}
+          </select>
+        )}
       </Field>
       <Field label="Instructions (optional)">
         <input
@@ -475,8 +561,10 @@ function ServiceOrderForm({ visitId }: { visitId: string }) {
           onChange={(e) => setInstructions(e.target.value)}
         />
       </Field>
-      <Button type="submit" variant="secondary">
-        Add order
+      <Button type="submit" variant="secondary" disabled={!picked || busy}>
+        {picked && picked.price > 0
+          ? `Add order — KSh ${picked.price.toLocaleString("en-KE")}`
+          : "Add order"}
       </Button>
     </form>
   );

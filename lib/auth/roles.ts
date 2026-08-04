@@ -22,6 +22,8 @@ export type Permission =
   | "clinic.services.manage"
   | "clinic.pharmacy.manage"
   | "clinic.medicine.manage"
+  | "clinic.catalog.manage"
+  | "clinic.payments.take"
   | "clinic.finance.manage";
 
 export interface SessionUser {
@@ -64,9 +66,12 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "clinic.services.manage",
     "clinic.pharmacy.manage",
     "clinic.medicine.manage",
+    "clinic.catalog.manage",
+    "clinic.payments.take",
     "clinic.finance.manage",
   ],
-  receptionist: ["clinic.reception.manage"],
+  // Reception is the cashier for the consultation and service pay-gates.
+  receptionist: ["clinic.reception.manage", "clinic.payments.take"],
   nurse: ["clinic.reception.manage"],
   doctor: ["clinic.doctor.manage"],
   lab: ["clinic.services.manage"],
@@ -75,6 +80,7 @@ export const ROLE_PERMISSIONS: Record<Role, Permission[]> = {
     "mpesa.initiate",
     "clinic.pharmacy.manage",
     "clinic.medicine.manage",
+    "clinic.payments.take",
   ],
 };
 
@@ -160,6 +166,13 @@ export const NAV: NavItem[] = [
     roles: ["pharmacist", "admin"],
   },
   {
+    // Priced lab / radiology / procedure catalog the doctor orders from.
+    href: "/admin/services",
+    label: "Service catalog",
+    icon: "🔬",
+    roles: ["admin"],
+  },
+  {
     // The accountant's page: expenses, cost of goods sold and P&L.
     href: "/admin/accounting",
     label: "Accounting",
@@ -174,6 +187,13 @@ export const NAV: NavItem[] = [
     roles: ["admin"],
   },
   { href: "/admin/users", label: "Users", icon: "⚙️", roles: ["admin"] },
+  {
+    // Clinic-wide billing mode (pay-per-stage vs pay-at-end) + consultation fee.
+    href: "/admin/settings",
+    label: "Settings",
+    icon: "🛠️",
+    roles: ["admin"],
+  },
 ];
 
 export function navForRole(role: Role): NavItem[] {

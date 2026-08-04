@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { completeServiceOrder, startServiceOrder, useClinic } from "@/lib/store";
-import type { OrderType } from "@/lib/types";
+import type { LabParameter, Order, OrderType } from "@/lib/types";
 import {
   Button,
   Card,
@@ -66,12 +66,14 @@ export default function ServicesPage() {
           {items.map(({ order, patient }) => (
             <ResultCard
               key={order.id}
-              orderId={order.id}
-              title={order.title}
-              type={order.type}
-              instructions={order.instructions}
+              order={order}
+              // Labs report against the catalog's parameter panel; radiology
+              // and procedures report a free-text finding.
+              parameters={
+                data.serviceCatalog.find((s) => s.id === order.serviceItemId)
+                  ?.parameters ?? []
+              }
               patient={patientName(patient)}
-              status={order.status}
             />
           ))}
         </div>
@@ -81,58 +83,117 @@ export default function ServicesPage() {
 }
 
 function ResultCard({
-  orderId,
-  title,
-  type,
-  instructions,
+  order,
+  parameters,
   patient,
-  status,
 }: {
-  orderId: string;
-  title: string;
-  type: string;
-  instructions?: string;
+  order: Order;
+  parameters: LabParameter[];
   patient: string;
-  status: "requested" | "in-progress" | "completed";
 }) {
-  const [result, setResult] = useState("");
+  // Panel entry keyed by parameter name; free-text for everything else.
+  const [values, setValues] = useState<Record<string, string>>({});
+  const [freeText, setFreeText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const status = order.status;
+  const locked = status === "requested";
+  const panel = parameters.length > 0;
+  const filled = panel
+    ? parameters.some((p) => values[p.name]?.trim())
+    : freeText.trim() !== "";
+
+  const file = async () => {
+    setBusy(true);
+    await completeServiceOrder(
+      order.id,
+      panel
+        ? {
+            results: parameters.map((p) => ({
+              parameter: p.name,
+              value: values[p.name]?.trim() ?? "",
+            })),
+            // A panel can still carry an overall comment.
+            result: freeText.trim() || undefined,
+          }
+        : { result: freeText },
+    );
+    setBusy(false);
+  };
 
   return (
     <Card>
       <div className="flex items-start justify-between">
         <div>
-          <p className="font-medium">{title}</p>
+          <p className="font-medium">{order.title}</p>
           <p className="text-xs text-zinc-500">
-            {patient} · <span className="capitalize">{type}</span>
+            {patient} · <span className="capitalize">{order.type}</span>
           </p>
         </div>
         <StatusBadge status={status} />
       </div>
-      {instructions && (
-        <p className="mt-2 text-xs text-zinc-500">Note: {instructions}</p>
+      {order.instructions && (
+        <p className="mt-2 text-xs text-zinc-500">Note: {order.instructions}</p>
       )}
-      {status === "requested" && (
+      {locked && (
         <Button
           className="mt-3 w-full"
           variant="secondary"
-          onClick={() => startServiceOrder(orderId)}
+          onClick={() => startServiceOrder(order.id)}
         >
           Start work
         </Button>
       )}
-      <textarea
-        className={`${inputClass} mt-3 h-20 w-full py-2`}
-        placeholder="Enter result / findings…"
-        value={result}
-        onChange={(e) => setResult(e.target.value)}
-        disabled={status === "requested"}
-      />
+
+      {panel ? (
+        <div className="mt-3 flex flex-col gap-2">
+          {parameters.map((p) => (
+            <div key={p.name} className="flex items-center gap-2">
+              <label className="w-32 shrink-0 text-xs text-zinc-600">
+                {p.name}
+                {p.unit && (
+                  <span className="ml-1 text-zinc-400">({p.unit})</span>
+                )}
+              </label>
+              <input
+                className={`${inputClass} flex-1`}
+                value={values[p.name] ?? ""}
+                disabled={locked}
+                onChange={(e) =>
+                  setValues((v) => ({ ...v, [p.name]: e.target.value }))
+                }
+              />
+              {(p.refLow != null || p.refHigh != null) && (
+                <span className="w-20 shrink-0 text-right text-[11px] tabular-nums text-zinc-400">
+                  {p.refLow ?? ""}–{p.refHigh ?? ""}
+                </span>
+              )}
+            </div>
+          ))}
+          <textarea
+            className={`${inputClass} h-14 w-full py-2`}
+            placeholder="Comment (optional)…"
+            value={freeText}
+            disabled={locked}
+            onChange={(e) => setFreeText(e.target.value)}
+          />
+        </div>
+      ) : (
+        <textarea
+          className={`${inputClass} mt-3 h-20 w-full py-2`}
+          placeholder="Enter result / findings…"
+          value={freeText}
+          disabled={locked}
+          onChange={(e) => setFreeText(e.target.value)}
+        />
+      )}
+
       <Button
         className="mt-3 w-full"
-        disabled={status === "requested" || !result.trim()}
-        onClick={() => completeServiceOrder(orderId, result)}
+        disabled={locked || !filled || busy}
+        onClick={file}
       >
-        {status === "requested"
+        {locked
           ? "Start work before saving result"
           : "Save result & return to doctor"}
       </Button>

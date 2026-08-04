@@ -2,12 +2,19 @@
 
 import { useMemo, useState } from "react";
 import {
+  payCharges,
   recordTriage,
   registerPatient,
   startVisit,
   useClinic,
 } from "@/lib/store";
-import type { Gender, Patient, Priority } from "@/lib/types";
+import type {
+  Gender,
+  Patient,
+  PaymentMethod,
+  Priority,
+  Visit,
+} from "@/lib/types";
 import {
   Button,
   Card,
@@ -25,26 +32,34 @@ import {
   LONG_STAY_MS,
   VERY_LONG_STAY_MS,
   type VisitLocation,
+  chargesTotal,
   doctorMap,
   doctorName,
   doctorQueueCounts,
+  outstandingCharges,
   patientMap,
   patientName,
   visitLocation,
   visitTiming,
+  visitsAwaitingPayment,
 } from "@/lib/selectors";
+import { StkBanner, useStkEnabled, useStkPush } from "@/components/MpesaPrompt";
 
 /**
- * Reception is now split into three tabs so the receptionist only ever sees
- * one job at a time:
+ * Reception is split into tabs so the receptionist only ever sees one job at
+ * a time:
  *
  *   1. Check in  — one search box that finds a patient by ID / name / MRN,
  *                  or registers a new one if nothing matches.
- *   2. Triage    — vitals for checked-in patients (badge shows how many wait).
- *   3. Patients  — the full register, for reference only.
+ *   2. Payments  — the cashier desk. In per-stage billing patients wait here
+ *                  for the consultation fee and, later, for their lab fees.
+ *                  Stays empty in pay-at-end billing, where the pharmacy
+ *                  collects everything at the end.
+ *   3. Triage    — vitals for checked-in patients (badge shows how many wait).
+ *   4. Patients  — the full register, for reference only.
  */
 
-type Tab = "checkin" | "triage" | "patients";
+type Tab = "checkin" | "payments" | "triage" | "patients";
 
 export default function ReceptionPage() {
   const data = useClinic();
@@ -53,6 +68,7 @@ export default function ReceptionPage() {
   const triageCount = data.visits.filter(
     (v) => v.status === "awaiting-triage",
   ).length;
+  const paymentCount = visitsAwaitingPayment(data).length;
 
   return (
     <div>
@@ -66,6 +82,7 @@ export default function ReceptionPage() {
       <TabBar
         tab={tab}
         onChange={setTab}
+        paymentCount={paymentCount}
         triageCount={triageCount}
         patientCount={data.patients.length}
       />
@@ -73,6 +90,7 @@ export default function ReceptionPage() {
       {tab === "checkin" && (
         <CheckInTab onGoToTriage={() => setTab("triage")} />
       )}
+      {tab === "payments" && <PaymentsTab />}
       {tab === "triage" && <TriageTab />}
       {tab === "patients" && <PatientsTab />}
     </div>
@@ -84,16 +102,19 @@ export default function ReceptionPage() {
 function TabBar({
   tab,
   onChange,
+  paymentCount,
   triageCount,
   patientCount,
 }: {
   tab: Tab;
   onChange: (t: Tab) => void;
+  paymentCount: number;
   triageCount: number;
   patientCount: number;
 }) {
   const tabs: { id: Tab; label: string; count?: number }[] = [
     { id: "checkin", label: "Check in" },
+    { id: "payments", label: "Payments", count: paymentCount },
     { id: "triage", label: "Triage", count: triageCount },
     { id: "patients", label: "Patients", count: patientCount },
   ];
@@ -500,6 +521,265 @@ function RegisterForm({
         </Button>
       </div>
     </form>
+  );
+}
+
+// --- payments tab -----------------------------------------------------------------
+
+const money = (n: number) =>
+  `KSh ${n.toLocaleString("en-KE", { maximumFractionDigits: 2 })}`;
+
+const METHODS: { key: PaymentMethod; label: string }[] = [
+  { key: "cash", label: "Cash" },
+  { key: "mpesa", label: "M-Pesa" },
+  { key: "card", label: "Card" },
+];
+
+/** The cashier queue: patients held at a pay-gate until their bill so far is
+ *  settled. Only per-stage visits ever land here. */
+function PaymentsTab() {
+  const data = useClinic();
+  const pmap = patientMap(data);
+  const queue = visitsAwaitingPayment(data);
+  // PayHero credentials present? If not, M-Pesa falls back to typing the code
+  // off the patient's phone, exactly as the pharmacy does.
+  const stkEnabled = useStkEnabled();
+
+  if (queue.length === 0) {
+    return (
+      <EmptyState>
+        Nobody is waiting to pay. In pay-at-end billing this stays empty — the
+        pharmacy collects the whole bill when the patient leaves.
+      </EmptyState>
+    );
+  }
+
+  return (
+    <div className="grid gap-3 lg:grid-cols-2">
+      {queue.map((visit) => {
+        const patient = pmap.get(visit.patientId);
+        return (
+          <PaymentCard
+            key={visit.id}
+            visit={visit}
+            name={patient ? patientName(patient) : "Unknown patient"}
+            mrn={patient?.mrn ?? ""}
+            patientPhone={patient?.phone ?? ""}
+            stkEnabled={stkEnabled}
+          />
+        );
+      })}
+    </div>
+  );
+}
+
+function PaymentCard({
+  visit,
+  name,
+  mrn,
+  patientPhone,
+  stkEnabled,
+}: {
+  visit: Visit;
+  name: string;
+  mrn: string;
+  patientPhone: string;
+  stkEnabled: boolean;
+}) {
+  const [method, setMethod] = useState<PaymentMethod>("cash");
+  const [reference, setReference] = useState("");
+  const [phone, setPhone] = useState(patientPhone);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const charges = outstandingCharges(visit);
+  const total = chargesTotal(charges);
+  // With PayHero configured, M-Pesa prompts the patient's phone instead of
+  // asking the cashier to copy a code — the same flow the pharmacy runs.
+  const stkFlow = method === "mpesa" && stkEnabled;
+  // Cash needs no reference; a typed-in M-Pesa or card payment must be
+  // traceable to a receipt.
+  const needsReference = method !== "cash" && !stkFlow;
+  const ready = !busy && (!needsReference || reference.trim() !== "");
+
+  const gate =
+    visit.status === "awaiting-consult-payment"
+      ? "Consultation fee — due before triage"
+      : "Service fees — due before the tests are run";
+
+  /** Book the money against the gate's charges. `serverReference` is the
+   *  CheckoutRequestID of a confirmed push; the server swaps in the receipt.
+   *  On success the gate opens and this card leaves the queue. */
+  const take = async (serverReference?: string) => {
+    setBusy(true);
+    setError(null);
+    const err = await payCharges({
+      visitId: visit.id,
+      chargeIds: charges.map((c) => c.id),
+      method,
+      reference: (serverReference ?? reference).trim() || undefined,
+    });
+    setBusy(false);
+    if (err) setError(err);
+  };
+
+  // Money confirmed on the patient's phone → release the gate automatically.
+  const {
+    stk,
+    busy: stkBusy,
+    error: stkError,
+    request,
+    reset: resetStk,
+  } = useStkPush((checkoutRequestId) => void take(checkoutRequestId));
+
+  const requestStk = () =>
+    void request({
+      phone,
+      accountReference: mrn || "CareFlow",
+      // The server prices these charges itself, so the pushed amount always
+      // matches what payCharges will settle.
+      visitId: visit.id,
+      chargeIds: charges.map((c) => c.id),
+    });
+
+  const shownError = error ?? stkError;
+
+  return (
+    <Card>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="font-medium text-zinc-900">{name}</p>
+          <p className="text-xs text-zinc-500">{mrn}</p>
+        </div>
+        <StayBadge timing={visitTiming(visit)} />
+      </div>
+
+      <p className="mt-2 text-xs font-medium text-amber-700">{gate}</p>
+
+      <ul className="mt-3 flex flex-col gap-1 text-sm">
+        {charges.map((c) => (
+          <li
+            key={c.id}
+            className="flex justify-between rounded-lg bg-zinc-50 px-3 py-2"
+          >
+            <span className="text-zinc-700">{c.description}</span>
+            <span className="tabular-nums text-zinc-900">
+              {money(c.amount)}
+            </span>
+          </li>
+        ))}
+        <li className="mt-1 flex justify-between border-t border-zinc-200 px-3 pt-2 font-semibold">
+          <span>Total due</span>
+          <span className="tabular-nums text-teal-700">{money(total)}</span>
+        </li>
+      </ul>
+
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <Field label="Payment method">
+          <select
+            className={inputClass}
+            value={method}
+            onChange={(e) => {
+              setMethod(e.target.value as PaymentMethod);
+              resetStk();
+              setError(null);
+            }}
+          >
+            {METHODS.map((m) => (
+              <option key={m.key} value={m.key}>
+                {m.label}
+              </option>
+            ))}
+          </select>
+        </Field>
+        {stkFlow ? (
+          <Field label="Patient phone (Safaricom)">
+            <input
+              className={inputClass}
+              placeholder="e.g. 0712 345678"
+              value={phone}
+              disabled={stk?.status === "pending"}
+              onChange={(e) => setPhone(e.target.value)}
+            />
+          </Field>
+        ) : (
+          <Field
+            label={
+              method === "mpesa"
+                ? "M-Pesa code"
+                : method === "card"
+                  ? "Card reference"
+                  : "Reference (optional)"
+            }
+          >
+            <input
+              className={inputClass}
+              placeholder={method === "mpesa" ? "e.g. SGH4X2K9QT" : ""}
+              value={reference}
+              onChange={(e) => setReference(e.target.value)}
+            />
+          </Field>
+        )}
+      </div>
+
+      {shownError && (
+        <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+          {shownError}
+        </p>
+      )}
+
+      {stkFlow && stk && (
+        <StkBanner
+          stk={stk}
+          phone={phone}
+          onReset={resetStk}
+          success={
+            error ? (
+              <>
+                the payment was not recorded.{" "}
+                <button
+                  className="underline"
+                  disabled={busy}
+                  onClick={() => void take(stk.id)}
+                >
+                  Retry recording it
+                </button>
+              </>
+            ) : (
+              "releasing the patient…"
+            )
+          }
+        />
+      )}
+
+      {stkFlow ? (
+        <Button
+          className="mt-4 w-full"
+          disabled={
+            !ready ||
+            stkBusy ||
+            !phone.trim() ||
+            stk?.status === "pending" ||
+            stk?.status === "success"
+          }
+          onClick={requestStk}
+        >
+          {!phone.trim()
+            ? "Enter the patient's phone number"
+            : stk?.status === "pending"
+              ? "Waiting for M-Pesa…"
+              : `Request ${money(Math.max(1, Math.round(total)))} via M-Pesa`}
+        </Button>
+      ) : (
+        <Button className="mt-4 w-full" disabled={!ready} onClick={() => take()}>
+          {busy
+            ? "Recording…"
+            : needsReference && !reference.trim()
+              ? "Enter the payment reference"
+              : `Take ${money(total)}`}
+        </Button>
+      )}
+    </Card>
   );
 }
 

@@ -6,12 +6,17 @@ import type { Role } from "@/lib/auth/roles";
 import { hashPassword } from "@/lib/auth/password";
 import { mpesaConfigured } from "@/lib/server/mpesa";
 import type {
+  BillingMode,
+  ChargeType,
   ClinicData,
+  ClinicSettings,
   Doctor,
   Expense,
   ExpenseCategory,
   Gender,
   ID,
+  LabParameter,
+  LabResult,
   Med,
   Medicine,
   Order,
@@ -21,6 +26,7 @@ import type {
   Payment,
   PaymentMethod,
   Priority,
+  ServiceItem,
   Visit,
   VisitStatus,
   Vitals,
@@ -63,6 +69,26 @@ function mapVisit(v: VisitRow): Visit {
     complaint: v.complaint,
     assignedDoctorId: v.assignedDoctorId ?? undefined,
     status: v.status as VisitStatus,
+    billingMode: v.billingMode as BillingMode,
+    charges: v.charges.map((c) => ({
+      id: c.id,
+      type: c.type as ChargeType,
+      description: c.description,
+      amount: c.amount,
+      paid: c.paid,
+      paidAt: c.paidAt ? c.paidAt.toISOString() : undefined,
+      paymentId: c.paymentId ?? undefined,
+      createdAt: c.createdAt.toISOString(),
+    })),
+    payments: v.payments.map((p) => ({
+      id: p.id,
+      amount: p.amount,
+      method: p.method as PaymentMethod,
+      reference: p.reference ?? undefined,
+      paidAt: p.paidAt.toISOString(),
+      covers: p.covers,
+      takenBy: p.takenBy ?? undefined,
+    })),
     payment: v.payment
       ? {
           amount: v.payment.amount,
@@ -121,10 +147,139 @@ function mapOrder(o: OrderRow): Order {
     title: o.title,
     instructions: o.instructions ?? undefined,
     status: o.status as OrderStatus,
+    serviceItemId: o.serviceItemId ?? undefined,
+    results: o.results.length > 0
+      ? o.results.map((r) => ({
+          parameter: r.parameter,
+          value: r.value,
+          flag: (r.flag ?? undefined) as LabResult["flag"],
+        }))
+      : undefined,
     result: o.result ?? undefined,
     meds: (o.meds as Med[] | undefined)?.length ? (o.meds as Med[]) : undefined,
     createdAt: o.createdAt.toISOString(),
     completedAt: o.completedAt ? o.completedAt.toISOString() : undefined,
+  };
+}
+
+type ServiceItemRow = Awaited<
+  ReturnType<typeof prisma.serviceItem.findFirstOrThrow>
+>;
+
+function mapServiceItem(t: ServiceItemRow): ServiceItem {
+  return {
+    id: t.id,
+    name: t.name,
+    orderType: t.orderType as ServiceItem["orderType"],
+    category: t.category,
+    price: t.price,
+    parameters: t.parameters.map((p) => ({
+      name: p.name,
+      unit: p.unit,
+      refLow: p.refLow ?? undefined,
+      refHigh: p.refHigh ?? undefined,
+    })),
+    active: t.active,
+    createdAt: t.createdAt.toISOString(),
+  };
+}
+
+type ClinicSettingsRow = Awaited<
+  ReturnType<typeof prisma.clinicSettings.findFirstOrThrow>
+>;
+
+function mapSettings(s: ClinicSettingsRow): ClinicSettings {
+  return {
+    id: s.id,
+    billingMode: s.billingMode as BillingMode,
+    consultationFee: s.consultationFee,
+    updatedAt: s.updatedAt.toISOString(),
+    updatedById: s.updatedById ?? undefined,
+  };
+}
+
+/** Read the singleton clinic settings, creating a default row on first call. */
+async function readSettings(): Promise<ClinicSettings> {
+  const existing = await prisma.clinicSettings.findFirst();
+  if (existing) return mapSettings(existing);
+  const created = await prisma.clinicSettings.create({ data: {} });
+  return mapSettings(created);
+}
+
+// --- billing ---------------------------------------------------------------
+//
+// A charge is created the moment the thing being charged for is ordered, in
+// both billing modes. The mode only decides whether the patient is *stopped*
+// at that point: per-stage holds them at the cashier until the charge is
+// settled, pay-at-end lets them walk on with the bill running and collects
+// everything once, at the pharmacy.
+
+type ChargeRow = VisitRow["charges"][number];
+
+/** Service charges — the ones that gate `awaiting-lab-payment`. */
+const SERVICE_CHARGE_TYPES: ChargeType[] = ["lab", "radiology", "procedure"];
+
+/** A fresh unpaid charge row. Amounts are rounded to the cent so repeated
+ *  float arithmetic can never leave a bill that won't settle to zero. */
+function newCharge(
+  type: ChargeType,
+  description: string,
+  amount: number,
+): ChargeRow {
+  return {
+    id: crypto.randomUUID(),
+    type,
+    description,
+    amount: Math.round(amount * 100) / 100,
+    paid: false,
+    paidAt: null,
+    paymentId: null,
+    createdAt: new Date(),
+  };
+}
+
+function unpaid(charges: ChargeRow[]): ChargeRow[] {
+  return charges.filter((c) => !c.paid);
+}
+
+function totalOf(charges: ChargeRow[]): number {
+  return Math.round(charges.reduce((s, c) => s + c.amount, 0) * 100) / 100;
+}
+
+/** Mark `settled` as paid by `paymentId`, leaving every other charge alone. */
+function settleCharges(
+  charges: ChargeRow[],
+  settled: ChargeRow[],
+  paymentId: string,
+  paidAt: Date,
+): ChargeRow[] {
+  const ids = new Set(settled.map((c) => c.id));
+  return charges.map((c) =>
+    ids.has(c.id) ? { ...c, paid: true, paidAt, paymentId } : c,
+  );
+}
+
+/** The opening state of a new visit: the billing mode snapshot, the
+ *  consultation charge (when the clinic charges one), and where the patient
+ *  starts. Snapshotting the mode here is what stops an admin's mid-visit
+ *  toggle from retroactively rewriting how this visit is charged. */
+async function openingVisitState() {
+  const settings = await readSettings();
+  const charges =
+    settings.consultationFee > 0
+      ? [newCharge("consultation", "Consultation fee", settings.consultationFee)]
+      : [];
+  // A free consultation has nothing to collect, so there is no gate to hold
+  // the patient at even in per-stage mode.
+  const status: VisitStatus =
+    settings.billingMode === "per-stage" && charges.length > 0
+      ? "awaiting-consult-payment"
+      : "awaiting-triage";
+  return {
+    billingMode: settings.billingMode,
+    charges,
+    status,
+    timeline: [{ status, at: new Date() }],
   };
 }
 
@@ -202,6 +357,8 @@ export async function getClinicData(opts?: {
     visits,
     orders,
     medicines,
+    serviceCatalog,
+    settings,
     expenses,
     cashCounts,
     mpesaTxns,
@@ -215,6 +372,11 @@ export async function getClinicData(opts?: {
     prisma.visit.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.order.findMany({ orderBy: { createdAt: "asc" } }),
     prisma.medicine.findMany({ orderBy: { name: "asc" } }),
+    prisma.serviceItem.findMany({
+      where: { active: true },
+      orderBy: [{ orderType: "asc" }, { category: "asc" }, { name: "asc" }],
+    }),
+    readSettings(),
     opts?.includeFinance
       ? prisma.expense.findMany({ orderBy: { date: "desc" } })
       : Promise.resolve([]),
@@ -235,6 +397,8 @@ export async function getClinicData(opts?: {
     visits: visits.map(mapVisit),
     orders: orders.map(mapOrder),
     medicines: medicines.map(mapMedicine),
+    serviceCatalog: serviceCatalog.map(mapServiceItem),
+    settings,
     expenses: expenses.map(mapExpense),
     cashCounts: cashCounts.map((c) => ({
       id: c.id,
@@ -309,8 +473,7 @@ export async function registerPatient(input: {
       vitals: EMPTY_VITALS,
       complaint: "",
       assignedDoctorId: input.assignedDoctorId || null,
-      status: "awaiting-triage",
-      timeline: [{ status: "awaiting-triage", at: new Date() }],
+      ...(await openingVisitState()),
     },
   });
 }
@@ -336,8 +499,7 @@ export async function startVisit(input: {
       vitals: EMPTY_VITALS,
       complaint: "",
       assignedDoctorId: input.assignedDoctorId || null,
-      status: "awaiting-triage",
-      timeline: [{ status: "awaiting-triage", at: new Date() }],
+      ...(await openingVisitState()),
     },
   });
 }
@@ -686,24 +848,153 @@ export async function setVisitComplaint(input: {
   });
 }
 
+/** Order a service off the catalog. The title and price come from the catalog
+ *  row, never from the client — the same rule the pharmacy POS applies to
+ *  medicine prices. */
 export async function addServiceOrder(input: {
   visitId: ID;
-  type: Exclude<OrderType, "prescription">;
-  title: string;
+  serviceItemId: ID;
   instructions?: string;
-}) {
+}): Promise<{ error: string } | void> {
+  const item = await prisma.serviceItem.findUnique({
+    where: { id: input.serviceItemId },
+  });
+  if (!item || !item.active) {
+    return { error: "That service is no longer in the catalog." };
+  }
+  const visit = await prisma.visit.findUnique({ where: { id: input.visitId } });
+  if (!visit) return { error: "Visit not found." };
+
   await prisma.order.create({
     data: {
       visitId: input.visitId,
-      type: input.type,
-      title: input.title.trim(),
+      type: item.orderType,
+      title: item.name,
       instructions: input.instructions?.trim() || null,
       status: "requested",
+      serviceItemId: item.id,
     },
   });
+
+  // A free service raises no charge, so it never gates the patient.
+  const charges =
+    item.price > 0
+      ? [...visit.charges, newCharge(item.orderType as ChargeType, item.name, item.price)]
+      : visit.charges;
+  const owesForServices = unpaid(charges).some((c) =>
+    SERVICE_CHARGE_TYPES.includes(c.type as ChargeType),
+  );
+  const status: VisitStatus =
+    visit.billingMode === "per-stage" && owesForServices
+      ? "awaiting-lab-payment"
+      : "awaiting-services";
   await prisma.visit.update({
     where: { id: input.visitId },
-    data: { status: "awaiting-services", timeline: stage("awaiting-services") },
+    data: { charges: { set: charges }, status, timeline: stage(status) },
+  });
+}
+
+/** Take money for some of a visit's outstanding charges — reception's two
+ *  pay-gates both come through here. Records one VisitPayment covering the
+ *  settled lines, then releases the patient if that clears their gate. */
+export async function payCharges(input: {
+  visitId: ID;
+  chargeIds: ID[];
+  method: PaymentMethod;
+  reference?: string;
+  takenBy?: string;
+}): Promise<{ error: string } | void> {
+  const visit = await prisma.visit.findUnique({ where: { id: input.visitId } });
+  if (!visit) return { error: "Visit not found." };
+
+  // Settle only lines that are still outstanding, so a double-submitted form
+  // can never take the same money twice.
+  const wanted = new Set(input.chargeIds ?? []);
+  const settling = visit.charges.filter((c) => wanted.has(c.id) && !c.paid);
+  if (settling.length === 0) {
+    return { error: "Those charges have already been paid." };
+  }
+
+  const total = totalOf(settling);
+
+  // Same rule as the pharmacy checkout: with PayHero configured, an M-Pesa
+  // payment must point at a push we actually saw succeed, for this exact
+  // amount. `reference` is the CheckoutRequestID; the receipt replaces it.
+  let reference = input.reference?.trim() || undefined;
+  if (input.method === "mpesa" && mpesaConfigured()) {
+    const tx = reference
+      ? await prisma.mpesaTransaction.findUnique({
+          where: { checkoutRequestId: reference },
+        })
+      : null;
+    if (!tx) {
+      return { error: "Send the M-Pesa request and wait for it to confirm." };
+    }
+    if (tx.status !== "success") {
+      return { error: "The M-Pesa payment has not been confirmed yet." };
+    }
+    if (tx.amount !== Math.max(1, Math.round(total))) {
+      return {
+        error:
+          "The bill changed after the M-Pesa request. Send a new payment request.",
+      };
+    }
+    if (tx.visitId && tx.visitId !== input.visitId) {
+      return { error: "That M-Pesa payment was used for another visit." };
+    }
+    // A visit pays at more than one gate, so being tied to this visit is not
+    // enough — the same push must not settle a second gate for free.
+    const alreadySpent = visit.payments.some(
+      (p) =>
+        p.reference &&
+        (p.reference === tx.receipt || p.reference === tx.checkoutRequestId),
+    );
+    if (alreadySpent) {
+      return { error: "That M-Pesa payment was already used on this visit." };
+    }
+    await prisma.mpesaTransaction.update({
+      where: { checkoutRequestId: tx.checkoutRequestId },
+      data: { visitId: input.visitId },
+    });
+    reference = tx.receipt ?? tx.checkoutRequestId;
+  }
+
+  const paidAt = new Date();
+  const payment = {
+    id: crypto.randomUUID(),
+    amount: total,
+    method: input.method,
+    reference: reference ?? null,
+    paidAt,
+    covers: settling.map((c) => c.id),
+    takenBy: input.takenBy ?? null,
+  };
+  const charges = settleCharges(visit.charges, settling, payment.id, paidAt);
+
+  // Releasing the gate: the patient moves on only once nothing of that kind is
+  // still outstanding — a doctor may have ordered three tests and been paid
+  // for two.
+  const stillOwes = unpaid(charges);
+  let status = visit.status as VisitStatus;
+  if (
+    status === "awaiting-consult-payment" &&
+    !stillOwes.some((c) => c.type === "consultation")
+  ) {
+    status = "awaiting-triage";
+  } else if (
+    status === "awaiting-lab-payment" &&
+    !stillOwes.some((c) => SERVICE_CHARGE_TYPES.includes(c.type as ChargeType))
+  ) {
+    status = "awaiting-services";
+  }
+
+  await prisma.visit.update({
+    where: { id: input.visitId },
+    data: {
+      charges: { set: charges },
+      payments: { push: payment },
+      ...(status !== visit.status ? { status, timeline: stage(status) } : {}),
+    },
   });
 }
 
@@ -734,15 +1025,53 @@ export async function startServiceOrder(input: { orderId: ID }) {
   });
 }
 
+/** File a service result. Labs report per-parameter values against the catalog
+ *  panel; radiology and procedures report a free-text finding. The low/high
+ *  flag is derived here from the catalog's reference range rather than trusted
+ *  from the client, so a range correction can't be contradicted by old data. */
 export async function completeServiceOrder(input: {
   orderId: ID;
-  result: string;
-}) {
+  result?: string;
+  results?: LabResult[];
+}): Promise<{ error: string } | void> {
+  const existing = await prisma.order.findUnique({
+    where: { id: input.orderId },
+  });
+  if (!existing) return { error: "Order not found." };
+
+  const item = existing.serviceItemId
+    ? await prisma.serviceItem.findUnique({
+        where: { id: existing.serviceItemId },
+      })
+    : null;
+  const ranges = new Map(item?.parameters.map((p) => [p.name, p]) ?? []);
+
+  const results = (input.results ?? [])
+    .filter((r) => r.value?.trim())
+    .map((r) => {
+      const range = ranges.get(r.parameter);
+      const value = Number(r.value);
+      let flag: LabResult["flag"];
+      // Qualitative results ("positive") simply carry no flag.
+      if (range && Number.isFinite(value)) {
+        if (range.refLow != null && value < range.refLow) flag = "low";
+        else if (range.refHigh != null && value > range.refHigh) flag = "high";
+        else if (range.refLow != null || range.refHigh != null) flag = "normal";
+      }
+      return { parameter: r.parameter, value: r.value.trim(), flag: flag ?? null };
+    });
+
+  const freeText = input.result?.trim();
+  if (results.length === 0 && !freeText) {
+    return { error: "Enter a result before filing it." };
+  }
+
   const order = await prisma.order.update({
     where: { id: input.orderId },
     data: {
       status: "completed",
-      result: input.result,
+      results: { set: results },
+      result: freeText || null,
       completedAt: new Date(),
     },
   });
@@ -786,7 +1115,19 @@ export async function toggleMedDispensed(input: {
   });
 }
 
-export async function dispenseAndClose(input: { visitId: ID }) {
+/** Close a visit with nothing to sell. Only legitimate once the bill is clear
+ *  — anything outstanding has to go through the POS so the money is recorded. */
+export async function dispenseAndClose(input: {
+  visitId: ID;
+}): Promise<{ error: string } | void> {
+  const visit = await prisma.visit.findUnique({ where: { id: input.visitId } });
+  if (!visit) return { error: "Visit not found." };
+  const owed = unpaid(visit.charges);
+  if (owed.length > 0) {
+    return {
+      error: `This visit still owes ${totalOf(owed)} — take the payment at the POS to close it.`,
+    };
+  }
   await prisma.order.updateMany({
     where: { visitId: input.visitId, type: "prescription" },
     data: { status: "completed", completedAt: new Date() },
@@ -797,22 +1138,25 @@ export async function dispenseAndClose(input: { visitId: ID }) {
   });
 }
 
-/** Pharmacy POS: sell the carted medicines from the catalog, take the payment,
- *  and close the visit. Prices come from the catalog (never the client) and
- *  stock is checked and decremented here. */
+/** Pharmacy POS: sell the carted medicines, settle everything still owed on
+ *  the visit, and close it. Prices come from the catalog (never the client)
+ *  and stock is checked and decremented here.
+ *
+ *  This is where pay-at-end visits finally pay: the payment covers the carted
+ *  medicines *plus* every charge that accumulated earlier (consultation, lab).
+ *  In per-stage mode those earlier charges are already settled, so the same
+ *  code path just bills the medicines. */
 export async function checkoutVisit(input: {
   visitId: ID;
   method: PaymentMethod;
   reference?: string;
   items: { medicineId: ID; quantity: number }[];
+  takenBy?: string;
 }): Promise<{ error: string } | { payment: Payment }> {
   const items = (input.items ?? []).map((i) => ({
     medicineId: i.medicineId,
     quantity: Math.max(1, Math.round(i.quantity)),
   }));
-  if (items.length === 0) {
-    return { error: "The cart is empty — add at least one medicine." };
-  }
 
   // A retried checkout (e.g. the response got lost after an M-Pesa success)
   // must not sell the cart twice: hand back the payment already recorded.
@@ -832,6 +1176,14 @@ export async function checkoutVisit(input: {
       };
     }
     return { error: "This visit is already closed." };
+  }
+
+  // A patient who was never prescribed anything still has to settle what they
+  // ran up on the way through, so an empty cart is fine as long as something
+  // is outstanding.
+  const outstanding = unpaid(visit.charges);
+  if (items.length === 0 && outstanding.length === 0) {
+    return { error: "The cart is empty — add at least one medicine." };
   }
 
   const medicines = await prisma.medicine.findMany({
@@ -862,7 +1214,17 @@ export async function checkoutVisit(input: {
       unitCost: med.costPrice,
     });
   }
-  const total = saleItems.reduce((s, i) => s + i.quantity * i.unitPrice, 0);
+  // One charge per sale line, settled by this same payment — so a receipt and
+  // the visit's bill always tell the same story.
+  const pharmacyCharges = saleItems.map((i) =>
+    newCharge(
+      "pharmacy",
+      i.quantity > 1 ? `${i.name} × ${i.quantity}` : i.name,
+      i.quantity * i.unitPrice,
+    ),
+  );
+  const settling = [...outstanding, ...pharmacyCharges];
+  const total = totalOf(settling);
 
   // With Daraja configured, an M-Pesa checkout must point at a transaction we
   // actually saw succeed, for the same amount. `reference` is the
@@ -883,7 +1245,7 @@ export async function checkoutVisit(input: {
     if (tx.amount !== Math.max(1, Math.round(total))) {
       return {
         error:
-          "The cart changed after the M-Pesa request. Send a new payment request.",
+          "The bill changed after the M-Pesa request. Send a new payment request.",
       };
     }
     if (tx.visitId && tx.visitId !== input.visitId) {
@@ -899,6 +1261,13 @@ export async function checkoutVisit(input: {
   // One transaction: a failure mid-way must not leave stock decremented
   // without the visit closed (or vice versa), or a retry would sell twice.
   const paidAt = new Date();
+  const paymentId = crypto.randomUUID();
+  const charges = settleCharges(
+    [...visit.charges, ...pharmacyCharges],
+    settling,
+    paymentId,
+    paidAt,
+  );
   await prisma.$transaction([
     ...items.map((item) =>
       prisma.medicine.update({
@@ -916,6 +1285,20 @@ export async function checkoutVisit(input: {
         status: "completed",
         timeline: stage("completed"),
         saleItems,
+        charges: { set: charges },
+        payments: {
+          push: {
+            id: paymentId,
+            amount: total,
+            method: input.method,
+            reference: reference ?? null,
+            paidAt,
+            covers: settling.map((c) => c.id),
+            takenBy: input.takenBy ?? null,
+          },
+        },
+        // Legacy single-payment field, still written so the pre-charges
+        // reporting path keeps working for visits closed at the POS.
         payment: {
           set: {
             amount: total,
@@ -1030,4 +1413,141 @@ export async function deleteExpense(input: {
   await prisma.expense.delete({ where: { id: input.id } });
 }
 
- 
+// --- settings --------------------------------------------------------------
+
+/** Update the singleton clinic settings. Missing fields are left untouched;
+ *  changing `billingMode` only affects visits opened afterwards (existing
+ *  visits keep their snapshotted `billingMode`). */
+export async function updateSettings(input: {
+  billingMode?: BillingMode;
+  consultationFee?: number;
+  updatedById?: ID;
+}): Promise<{ error: string } | void> {
+  if (input.consultationFee !== undefined && input.consultationFee < 0) {
+    return { error: "Consultation fee cannot be negative." };
+  }
+  if (
+    input.billingMode !== undefined &&
+    input.billingMode !== "per-stage" &&
+    input.billingMode !== "pay-at-end"
+  ) {
+    return { error: "Unknown billing mode." };
+  }
+  const existing = await prisma.clinicSettings.findFirst();
+  const data = {
+    ...(input.billingMode !== undefined && { billingMode: input.billingMode }),
+    ...(input.consultationFee !== undefined && {
+      consultationFee: input.consultationFee,
+    }),
+    updatedById: input.updatedById ?? null,
+  };
+  if (existing) {
+    await prisma.clinicSettings.update({ where: { id: existing.id }, data });
+  } else {
+    await prisma.clinicSettings.create({ data });
+  }
+}
+
+// --- service catalog (admin) ------------------------------------------------
+
+const ORDER_TYPES: ServiceItem["orderType"][] = ["lab", "radiology", "procedure"];
+
+/** Shared validation for both catalog writes. */
+function cleanServiceItem(input: {
+  name?: string;
+  orderType?: string;
+  category?: string;
+  price?: number;
+  parameters?: LabParameter[];
+}): { error: string } | {
+  name: string;
+  orderType: string;
+  category: string;
+  price: number;
+  parameters: LabParameter[];
+} {
+  const name = (input.name ?? "").trim();
+  if (!name) return { error: "Give the service a name." };
+  const orderType = (input.orderType ?? "") as ServiceItem["orderType"];
+  if (!ORDER_TYPES.includes(orderType)) {
+    return { error: "Pick lab, radiology or procedure." };
+  }
+  const price = Number(input.price);
+  if (!Number.isFinite(price) || price < 0) {
+    return { error: "Price must be zero or a positive number." };
+  }
+  // Only labs report against a parameter panel; the others are free-text.
+  const parameters =
+    orderType === "lab"
+      ? (input.parameters ?? [])
+          .filter((p) => p.name?.trim())
+          .map((p) => ({
+            name: p.name.trim(),
+            unit: (p.unit ?? "").trim(),
+            refLow: Number.isFinite(Number(p.refLow)) ? Number(p.refLow) : null,
+            refHigh: Number.isFinite(Number(p.refHigh))
+              ? Number(p.refHigh)
+              : null,
+          }))
+      : [];
+  return {
+    name,
+    orderType,
+    category: (input.category ?? "other").trim() || "other",
+    price: Math.round(price * 100) / 100,
+    parameters: parameters as unknown as LabParameter[],
+  };
+}
+
+export async function addServiceItem(input: {
+  name: string;
+  orderType: ServiceItem["orderType"];
+  category: string;
+  price: number;
+  parameters?: LabParameter[];
+}): Promise<{ error: string } | void> {
+  const clean = cleanServiceItem(input);
+  if ("error" in clean) return clean;
+
+  // Two rows with the same name would leave the doctor guessing which to order.
+  const existing = await prisma.serviceItem.findFirst({
+    where: { name: { equals: clean.name, mode: "insensitive" } },
+  });
+  if (existing) {
+    return { error: `"${clean.name}" is already in the catalog.` };
+  }
+  await prisma.serviceItem.create({ data: clean });
+}
+
+/** Edit a catalog entry. Re-pricing never touches charges already raised —
+ *  those keep the price that was quoted when the service was ordered. */
+export async function updateServiceItem(input: {
+  id: ID;
+  name: string;
+  orderType: ServiceItem["orderType"];
+  category: string;
+  price: number;
+  parameters?: LabParameter[];
+  active?: boolean;
+}): Promise<{ error: string } | void> {
+  const item = await prisma.serviceItem.findUnique({ where: { id: input.id } });
+  if (!item) return { error: "Service not found." };
+  const clean = cleanServiceItem(input);
+  if ("error" in clean) return clean;
+
+  const clash = await prisma.serviceItem.findFirst({
+    where: {
+      name: { equals: clean.name, mode: "insensitive" },
+      id: { not: input.id },
+    },
+  });
+  if (clash) return { error: `"${clean.name}" is already in the catalog.` };
+
+  await prisma.serviceItem.update({
+    where: { id: input.id },
+    data: {
+      ...clean,
+      ...(input.active !== undefined && { active: input.active }),
+    },
+  });
+}

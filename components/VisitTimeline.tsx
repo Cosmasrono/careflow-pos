@@ -10,8 +10,10 @@ import { formatDuration } from "@/lib/selectors";
 // Staff-friendly names for each timeline step.
 export const STAGE_LABELS: Record<VisitStatus, string> = {
   "awaiting-triage": "Reception",
+  "awaiting-consult-payment": "Consultation payment",
   waiting: "Sent to doctor",
   "with-doctor": "Consultation",
+  "awaiting-lab-payment": "Lab payment",
   "awaiting-services": "Services",
   "back-to-doctor": "Back to doctor",
   "awaiting-pharmacy": "Pharmacy",

@@ -37,12 +37,59 @@ type StageEvent {
   at     DateTime
 }
 
-// Recorded at the pharmacy POS when the visit is paid for and closed.
+// Legacy single-payment shape (visit closed with one lump sum at pharmacy).
+// Kept for old records; new visits use `payments` + `charges` instead.
 type Payment {
   amount    Float
   method    String // cash | mpesa | card
   reference String? // e.g. M-Pesa transaction code
   paidAt    DateTime
+}
+
+// One payment event on a visit. per-stage visits have several (consult, lab,
+// pharmacy); pay-at-end visits typically have one at pharmacy that covers all
+// outstanding charges. `covers` lists the Charge ids this payment settled.
+type VisitPayment {
+  id        String
+  amount    Float
+  method    String // cash | mpesa | card
+  reference String?
+  paidAt    DateTime
+  covers    String[] // Charge ids settled by this payment
+  takenBy   String?  // staff username at time of payment (for audit)
+}
+
+// One billable line on a visit. Added as the patient moves through:
+// consultation fee at consult, one per lab test ordered, one per dispensed med,
+// misc for injections / dressings / bed fees. `paid` is toggled by a
+// VisitPayment; in per-stage mode charges are paid before the next stage, in
+// pay-at-end mode they accumulate until the pharmacy takes one payment.
+type Charge {
+  id          String
+  type        String // consultation | lab | radiology | procedure | pharmacy | misc
+  description String
+  amount      Float
+  paid        Boolean  @default(false)
+  paidAt      DateTime?
+  paymentId   String?  // id of the VisitPayment that settled this charge
+  createdAt   DateTime
+}
+
+// One parameter of a lab test's result panel (CBC → WBC/RBC/Hb/PLT, etc.),
+// with the reference range the lab flags against.
+type LabParameter {
+  name    String // e.g. "WBC"
+  unit    String // e.g. "10^9/L"
+  refLow  Float?
+  refHigh Float?
+}
+
+// One measured value the lab entered for a parameter. Stored as string so
+// qualitative results ("positive"/"negative") work alongside numeric ones.
+type LabResult {
+  parameter String
+  value     String
+  flag      String? // low | high | normal
 }
 
 // One line of a pharmacy sale: which catalog medicine, how many, at what price.
@@ -111,7 +158,12 @@ model Visit {
   assignedDoctorId String?    @db.ObjectId // references a User with role "doctor"
   status           String
   timeline         StageEvent[] // timestamped status history, check-in → completed
-  payment          Payment?
+  // Snapshotted at check-in so a mid-visit billing-mode change on the clinic
+  // settings never retroactively rewrites how this visit is charged.
+  billingMode      String   @default("per-stage") // per-stage | pay-at-end
+  charges          Charge[]        // every billable line added during the visit
+  payments         VisitPayment[]  // every payment event on the visit
+  payment          Payment?        // legacy single-payment (old records only)
   saleItems        SaleItem[] // what the pharmacy actually sold at checkout
   createdAt        DateTime   @default(now())
   updatedAt        DateTime   @updatedAt
@@ -201,8 +253,43 @@ model Order {
   title        String
   instructions String?
   status       String
+  // Which catalog service was ordered — supplies the price and, for labs, the
+  // parameter panel. Prescriptions leave this null.
+  serviceItemId String?  @db.ObjectId
+  // Structured lab results (one entry per parameter). Radiology / procedure
+  // still use free-text `result` below.
+  results      LabResult[]
   result       String?
   meds         Med[]
   createdAt    DateTime  @default(now())
   completedAt  DateTime?
+}
+
+// Singleton clinic-wide settings. Read via `findFirst` and created lazily on
+// first read. `billingMode` decides whether new visits pay stage-by-stage or
+// once at the pharmacy; `consultationFee` is the flat fee charged at the
+// consultation gate (0 to skip).
+model ClinicSettings {
+  id              String   @id @default(auto()) @map("_id") @db.ObjectId
+  billingMode     String   @default("per-stage") // per-stage | pay-at-end
+  consultationFee Float    @default(0)
+  updatedAt       DateTime @updatedAt
+  updatedById     String?  @db.ObjectId
+}
+
+// A billable service the clinic offers — lab tests, imaging and procedures all
+// live here. Doctors pick from this catalog when ordering, and the picked item
+// supplies both the price (which becomes a Charge) and, for labs, the parameter
+// panel the technician fills in.
+model ServiceItem {
+  id         String         @id @default(auto()) @map("_id") @db.ObjectId
+  name       String
+  orderType  String // lab | radiology | procedure — which station runs it
+  category   String // haematology | biochemistry | microbiology | serology | urinalysis | imaging | other
+  price      Float
+  // Lab result panel. Radiology and procedures leave this empty and report a
+  // free-text finding instead.
+  parameters LabParameter[]
+  active     Boolean        @default(true)
+  createdAt  DateTime       @default(now())
 }

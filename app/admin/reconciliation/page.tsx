@@ -1,12 +1,14 @@
 "use client";
 
-// The daily money check, for admins: for each day, the payments recorded at
-// the pharmacy POS (cash / M-Pesa / card) against (a) the physical cash the
-// admin counted and (b) the M-Pesa payments Daraja actually confirmed. Any
-// difference shows as a red variance, so missing money is caught same-day.
+// The daily money check, for admins: for each day, every payment recorded
+// anywhere in the clinic (reception's pay-gates and the pharmacy POS, split by
+// cash / M-Pesa / card) against (a) the physical cash the admin counted and
+// (b) the M-Pesa payments Daraja actually confirmed. Any difference shows as a
+// red variance, so missing money is caught same-day.
 
 import { useMemo, useState } from "react";
 import { recordCashCount, useClinic } from "@/lib/store";
+import { paymentsOf } from "@/lib/selectors";
 import {
   Button,
   Card,
@@ -92,13 +94,17 @@ export default function ReconciliationPage() {
       return r;
     };
 
+    // Every payment on every visit — a per-stage patient pays reception for
+    // the consultation and their labs before the pharmacy ever sees them, and
+    // all of that cash has to show up in the day's count.
     for (const v of data.visits) {
-      if (!v.payment) continue;
-      if (new Date(v.payment.paidAt).getTime() < start) continue;
-      const r = row(dayOf(v.payment.paidAt));
-      if (v.payment.method === "cash") r.cash += v.payment.amount;
-      else if (v.payment.method === "mpesa") r.mpesa += v.payment.amount;
-      else r.card += v.payment.amount;
+      for (const p of paymentsOf(v)) {
+        if (new Date(p.paidAt).getTime() < start) continue;
+        const r = row(dayOf(p.paidAt));
+        if (p.method === "cash") r.cash += p.amount;
+        else if (p.method === "mpesa") r.mpesa += p.amount;
+        else r.card += p.amount;
+      }
     }
     for (const t of data.mpesaTransactions) {
       if (t.status !== "success") continue;

@@ -1,5 +1,9 @@
-// POST: send an STK push for a pharmacy cart. The amount is computed from the
-// medicine catalog server-side — the client only says what and how many.
+// POST: send an STK push for a till — reception's pay-gates as well as the
+// pharmacy checkout. The amount is computed server-side: the medicine catalog
+// prices the cart, and whatever the visit still owes is added on, so the
+// pushed amount always matches what checkoutVisit / payCharges will settle.
+// Reception passes `chargeIds` to bill only the lines its gate is holding the
+// patient for; the pharmacy omits them and sweeps up everything outstanding.
 // GET: tells the POS whether PayHero credentials are configured.
 
 import { NextResponse } from "next/server";
@@ -25,6 +29,8 @@ export async function POST(req: Request) {
     const body = (await req.json()) as {
       phone?: string;
       accountReference?: string;
+      visitId?: string;
+      chargeIds?: string[];
       items?: { medicineId: string; quantity: number }[];
     };
 
@@ -40,14 +46,30 @@ export async function POST(req: Request) {
       medicineId: i.medicineId,
       quantity: Math.max(1, Math.round(i.quantity)),
     }));
-    if (items.length === 0) {
+
+    // Charges the patient ran up and has not settled — reception's gate, or
+    // the pay-at-end bill. A visit with these owes money even with an empty
+    // cart. Narrowing to `chargeIds` matters: the pushed amount has to equal
+    // exactly what the till will settle, or the payment is rejected later.
+    const wanted = body.chargeIds?.length ? new Set(body.chargeIds) : null;
+    let outstanding = 0;
+    if (body.visitId) {
+      const visit = await prisma.visit.findUnique({
+        where: { id: body.visitId },
+      });
+      outstanding = (visit?.charges ?? [])
+        .filter((c) => !c.paid && (!wanted || wanted.has(c.id)))
+        .reduce((s, c) => s + c.amount, 0);
+    }
+    if (items.length === 0 && outstanding === 0) {
       return NextResponse.json({ error: "The cart is empty." }, { status: 400 });
     }
+
     const medicines = await prisma.medicine.findMany({
       where: { id: { in: items.map((i) => i.medicineId) } },
     });
     const byId = new Map(medicines.map((m) => [m.id, m]));
-    let amount = 0;
+    let amount = outstanding;
     for (const item of items) {
       const med = byId.get(item.medicineId);
       if (!med) {
@@ -86,7 +108,7 @@ export async function POST(req: Request) {
       phone,
       amount,
       accountReference: body.accountReference ?? "CareFlow",
-      description: "Pharmacy",
+      description: items.length > 0 ? "Pharmacy" : "Clinic fees",
     });
     if (!push.ok || !push.checkoutRequestId) {
       return NextResponse.json(

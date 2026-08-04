@@ -9,6 +9,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import * as repo from "@/lib/server/clinic-repo";
 import { getSession } from "@/lib/auth/session";
 import { hasPermission, ROLE_LABELS } from "@/lib/auth/roles";
+import { paymentsOf } from "@/lib/selectors";
 import type { ClinicData, Visit } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -26,16 +27,19 @@ type AiProvider = "anthropic" | "groq";
 /** Extra sections only an administrator's assistant gets to see. */
 function adminSnapshot(data: ClinicData): string {
   const weekStart = Date.now() - 7 * 24 * 60 * 60 * 1000;
-  const paidWeek = data.visits.filter(
-    (v) => v.payment && new Date(v.payment.paidAt).getTime() >= weekStart,
-  );
-  const revenueWeek = paidWeek.reduce((s, v) => s + (v.payment?.amount ?? 0), 0);
+  // Every payment, not just the one that closed the visit — per-stage patients
+  // pay for the consultation and their labs on the way through.
+  const takingsWeek = data.visits
+    .flatMap((v) => paymentsOf(v).map((payment) => ({ visit: v, payment })))
+    .filter((t) => new Date(t.payment.paidAt).getTime() >= weekStart);
+  const paidWeek = [...new Set(takingsWeek.map((t) => t.visit))];
+  const revenueWeek = takingsWeek.reduce((s, t) => s + t.payment.amount, 0);
 
   const byMethod = new Map<string, number>();
-  for (const v of paidWeek) {
+  for (const { payment } of takingsWeek) {
     byMethod.set(
-      v.payment!.method,
-      (byMethod.get(v.payment!.method) ?? 0) + v.payment!.amount,
+      payment.method,
+      (byMethod.get(payment.method) ?? 0) + payment.amount,
     );
   }
 

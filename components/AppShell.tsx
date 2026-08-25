@@ -5,9 +5,15 @@ import { usePathname, useRouter } from "next/navigation";
 import { useState, useTransition, type ReactNode } from "react";
 import { cn } from "./ui";
 import { useSession } from "./SessionProvider";
-import { navForRole, ROLE_LABELS } from "@/lib/auth/roles";
+import {
+  ROLE_LABELS,
+  sectionForPath,
+  sectionsForRole,
+  type NavSection,
+} from "@/lib/auth/roles";
 import { RouteLoadingOverlay } from "./PageLoadGate";
 import { AiAssistant } from "./AiAssistant";
+import { BrandLogo } from "./BrandLogo";
 
 const PAGE_BG: { prefix: string; img: string }[] = [
   { prefix: "/dashboard", img: "/images/ward.jpg" },
@@ -24,17 +30,17 @@ function backgroundFor(pathname: string): string | undefined {
   return PAGE_BG.find((b) => pathname.startsWith(b.prefix))?.img;
 }
 
+/** A section holding a single page is shown as that page — "Reception" reads
+ *  better than "Stations" for staff who only ever see the one station. */
+function sectionFace(section: NavSection): { label: string; icon: string } {
+  const only = section.items.length === 1 ? section.items[0] : null;
+  return only
+    ? { label: only.label, icon: only.icon }
+    : { label: section.label, icon: section.icon };
+}
+
 function BrandMark({ size = "md" }: { size?: "sm" | "md" }) {
-  return (
-    <span
-      className={cn(
-        "grid place-items-center rounded-xl bg-linear-to-br from-teal-500 to-teal-700 text-white shadow-inner shadow-white/20",
-        size === "md" ? "h-9 w-9 text-lg" : "h-8 w-8 text-base",
-      )}
-    >
-      ✚
-    </span>
-  );
+  return <BrandLogo size={size} />;
 }
 
 export function AppShell({ children }: { children: ReactNode }) {
@@ -47,7 +53,8 @@ export function AppShell({ children }: { children: ReactNode }) {
     return <>{children}</>;
   }
 
-  const nav = navForRole(session.role);
+  const sections = sectionsForRole(session.role);
+  const current = sectionForPath(sections, pathname);
   const bg = backgroundFor(pathname);
 
   // Push inside a transition so `navigating` stays true exactly as long as
@@ -81,16 +88,17 @@ export function AppShell({ children }: { children: ReactNode }) {
           </div>
         </div>
         <nav className="flex flex-1 flex-col gap-1">
-          {nav.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
+          {sections.map((section) => {
+            const active = current?.key === section.key;
+            // A section link lands on its first page; the tab bar takes over
+            // from there.
+            const href = section.items[0].href;
+            const face = sectionFace(section);
             return (
               <Link
-                key={item.href}
-                href={item.href}
-                onClick={(e) => navigate(e, item.href)}
+                key={section.key}
+                href={href}
+                onClick={(e) => navigate(e, href)}
                 className={cn(
                   "flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-colors",
                   active
@@ -98,8 +106,8 @@ export function AppShell({ children }: { children: ReactNode }) {
                     : "text-teal-200/75 hover:bg-white/5 hover:text-white",
                 )}
               >
-                <span className="text-base">{item.icon}</span>
-                {item.label}
+                <span className="text-base">{face.icon}</span>
+                {face.label}
               </Link>
             );
           })}
@@ -127,16 +135,15 @@ export function AppShell({ children }: { children: ReactNode }) {
           </button>
         </header>
         <nav className="flex gap-1 overflow-x-auto bg-teal-950 px-2 pb-1.5 sm:hidden print:!hidden">
-          {nav.map((item) => {
-            const active =
-              item.href === "/"
-                ? pathname === "/"
-                : pathname.startsWith(item.href);
+          {sections.map((section) => {
+            const active = current?.key === section.key;
+            const href = section.items[0].href;
+            const face = sectionFace(section);
             return (
               <Link
-                key={item.href}
-                href={item.href}
-                onClick={(e) => navigate(e, item.href)}
+                key={section.key}
+                href={href}
+                onClick={(e) => navigate(e, href)}
                 className={cn(
                   "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium",
                   active
@@ -144,7 +151,7 @@ export function AppShell({ children }: { children: ReactNode }) {
                     : "text-teal-200/75 hover:bg-white/5 hover:text-white",
                 )}
               >
-                {item.label}
+                {face.label}
               </Link>
             );
           })}
@@ -162,6 +169,13 @@ export function AppShell({ children }: { children: ReactNode }) {
             </>
           )}
           <div className="relative mx-auto w-full max-w-6xl p-3 sm:p-6">
+            {current && (
+              <SectionTabs
+                section={current}
+                pathname={pathname}
+                onNavigate={navigate}
+              />
+            )}
             {children}
           </div>
         </main>
@@ -173,6 +187,47 @@ export function AppShell({ children }: { children: ReactNode }) {
     </div>
     </>
 
+  );
+}
+
+/** In-page navigation for the section the user is in. Replaces the long flat
+ *  sidebar: the sidebar picks the section, these tabs pick the page. Sections
+ *  holding a single page (Dashboard, Activity) render nothing. */
+function SectionTabs({
+  section,
+  pathname,
+  onNavigate,
+}: {
+  section: NavSection;
+  pathname: string;
+  onNavigate: (e: React.MouseEvent<HTMLAnchorElement>, href: string) => void;
+}) {
+  if (section.items.length < 2) return null;
+
+  return (
+    <nav className="mb-4 flex gap-1 overflow-x-auto rounded-xl bg-white/70 p-1 ring-1 ring-inset ring-teal-900/10 backdrop-blur-sm print:hidden">
+      {section.items.map((item) => {
+        const active =
+          pathname === item.href || pathname.startsWith(item.href + "/");
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            onClick={(e) => onNavigate(e, item.href)}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm font-medium transition-colors",
+              active
+                ? "bg-teal-700 text-white shadow-sm"
+                : "text-teal-900/65 hover:bg-teal-900/5 hover:text-teal-900",
+            )}
+          >
+            <span className="text-base leading-none">{item.icon}</span>
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }
 

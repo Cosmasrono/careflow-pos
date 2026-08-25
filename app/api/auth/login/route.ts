@@ -8,10 +8,22 @@ export const runtime = "nodejs";
 
 export async function POST(req: Request) {
   try {
-    const { email, password } = await req.json();
-    const user = await prisma.user.findFirst({
-      where: { email: String(email ?? "").trim().toLowerCase() },
-    });
+    const body = await req.json();
+    // Staff sign in with whichever they were given: the username an admin
+    // created for them, or their email. `email` is still accepted so an older
+    // cached copy of the login page keeps working.
+    const identifier = String(body.identifier ?? body.email ?? "")
+      .trim()
+      .toLowerCase();
+    const password = body.password;
+
+    // Guarded: a blank identifier would otherwise match the email-less users
+    // created by the seed script, whose `email` is null.
+    const user = identifier
+      ? await prisma.user.findFirst({
+          where: { OR: [{ username: identifier }, { email: identifier }] },
+        })
+      : null;
 
     const ok =
       user &&
@@ -20,7 +32,7 @@ export async function POST(req: Request) {
 
     if (!ok || !user) {
       return NextResponse.json(
-        { error: "Invalid email or password" },
+        { error: "Invalid username or password" },
         { status: 401 },
       );
     }

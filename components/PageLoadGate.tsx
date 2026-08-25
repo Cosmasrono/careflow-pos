@@ -1,6 +1,7 @@
 "use client";
 
 import { Spinner } from "./ui";
+import { BrandLogo } from "./BrandLogo";
 
 /** Full-screen branded overlay shown while a route navigation is pending.
  *  Rendered by AppShell during the `useTransition` around router.push, so it
@@ -10,9 +11,7 @@ export function RouteLoadingOverlay() {
     <div className="fixed inset-0 z-90 grid place-items-center bg-linear-to-br from-teal-950 via-teal-900 to-teal-800 p-6 text-white">
       <div className="w-full max-w-sm rounded-2xl border border-white/15 bg-white/10 p-6 shadow-2xl backdrop-blur-sm">
         <div className="flex items-center gap-3">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-linear-to-br from-teal-400 to-teal-600 text-lg text-white shadow-inner shadow-white/20">
-            ✚
-          </span>
+          <BrandLogo size="lg" />
           <div>
             <p className="font-display text-lg font-semibold">CareFlow</p>
             <p className="text-xs text-teal-100/80">

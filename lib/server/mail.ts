@@ -120,3 +120,75 @@ export async function sendAccountSetupEmail(opts: {
       </div>`,
   });
 }
+
+export async function sendCredentialsEmail(opts: {
+  to: string;
+  name: string;
+  username: string;
+  password: string;
+  setupLink: string;
+}): Promise<void> {
+  const from = `"${process.env.MAIL_FROM_NAME ?? "CareFlow"}" <${
+    process.env.MAIL_FROM_ADDRESS ?? process.env.MAIL_USERNAME
+  }>`;
+
+  await transporter().sendMail({
+    from,
+    to: opts.to,
+    subject: "Your CareFlow account — choose your password",
+    text: [
+      `Hi ${opts.name},`,
+      "",
+      "An account has been created for you on CareFlow.",
+      "Open the link below to choose a password you'll remember:",
+      "",
+      opts.setupLink,
+      "",
+      `Your username is: ${opts.username}`,
+      "",
+      "The link works for 7 days. If it expires, or if you would rather sign",
+      "in first, use this temporary password and change it later from the",
+      "'Forgot password' link on the sign-in page:",
+      "",
+      `  Temporary password: ${opts.password}`,
+      "",
+      "If you were not expecting this, contact your administrator.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px">
+        <h2 style="color:#134e4a;margin:0 0 12px">Welcome to CareFlow</h2>
+        <p style="color:#3f3f46;line-height:1.6">Hi ${opts.name},</p>
+        <p style="color:#3f3f46;line-height:1.6">
+          An account has been created for you. Click below to choose a password
+          you&rsquo;ll remember &mdash; the link works for <strong>7 days</strong>.
+        </p>
+        <p style="margin:24px 0">
+          <a href="${opts.setupLink}"
+             style="background:#0d9488;color:#fff;text-decoration:none;padding:12px 20px;border-radius:10px;display:inline-block;font-weight:600">
+            Choose my password
+          </a>
+        </p>
+        <table style="margin:20px 0;border-collapse:collapse;background:#f4f4f5;border-radius:10px">
+          <tr>
+            <td style="padding:10px 16px;color:#71717a;font-size:13px">Username</td>
+            <td style="padding:10px 16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;color:#18181b">${opts.username}</td>
+          </tr>
+          <tr>
+            <td style="padding:10px 16px;color:#71717a;font-size:13px">Temporary password</td>
+            <td style="padding:10px 16px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-weight:600;color:#18181b">${opts.password}</td>
+          </tr>
+        </table>
+        <p style="color:#71717a;font-size:13px;line-height:1.6">
+          You can also sign in with the temporary password above and change it
+          later from the <strong>Forgot password</strong> link on the sign-in page.
+        </p>
+        <p style="color:#71717a;font-size:13px;line-height:1.6">
+          If the button doesn&rsquo;t work, copy this link into your browser:<br/>
+          <a href="${opts.setupLink}" style="color:#0d9488;word-break:break-all">${opts.setupLink}</a>
+        </p>
+        <p style="color:#71717a;font-size:13px">
+          If you were not expecting this, contact your administrator.
+        </p>
+      </div>`,
+  });
+}

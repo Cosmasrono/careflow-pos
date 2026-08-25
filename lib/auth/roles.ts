@@ -200,6 +200,80 @@ export function navForRole(role: Role): NavItem[] {
   return NAV.filter((n) => n.roles.includes(role));
 }
 
+// --- grouping ---------------------------------------------------------------
+// The sidebar shows one entry per section; the pages inside a section are
+// reached by a tab bar at the top of the page (rendered by AppShell). NAV above
+// stays the flat source of truth for access control — this only groups it.
+
+export interface NavSection {
+  key: string;
+  label: string;
+  icon: string;
+  /** Visible pages in tab order. Never empty. */
+  items: NavItem[];
+}
+
+const SECTION_DEFS: {
+  key: string;
+  label: string;
+  icon: string;
+  hrefs: string[];
+}[] = [
+  { key: "dashboard", label: "Dashboard", icon: "▦", hrefs: ["/dashboard"] },
+  {
+    key: "stations",
+    label: "Stations",
+    icon: "🏥",
+    hrefs: ["/reception", "/doctor", "/services", "/pharmacy"],
+  },
+  {
+    key: "patients",
+    label: "Patients",
+    icon: "👥",
+    hrefs: ["/flow", "/patients"],
+  },
+  {
+    key: "money",
+    label: "Money",
+    icon: "💰",
+    hrefs: ["/reports", "/admin/accounting", "/admin/reconciliation"],
+  },
+  {
+    key: "setup",
+    label: "Setup",
+    icon: "🛠️",
+    hrefs: ["/admin/medicines", "/admin/services", "/admin/users", "/admin/settings"],
+  },
+  { key: "activity", label: "Activity", icon: "🗓️", hrefs: ["/activity"] },
+];
+
+/** Sections this role can see, each already filtered to its allowed pages.
+ *  Sections with nothing left in them are dropped. */
+export function sectionsForRole(role: Role): NavSection[] {
+  const allowed = navForRole(role);
+  return SECTION_DEFS.map((def) => ({
+    key: def.key,
+    label: def.label,
+    icon: def.icon,
+    items: def.hrefs
+      .map((href) => allowed.find((n) => n.href === href))
+      .filter((n): n is NavItem => Boolean(n)),
+  })).filter((section) => section.items.length > 0);
+}
+
+/** Which section a path belongs to — drives sidebar highlighting and which
+ *  tab bar the page shows. */
+export function sectionForPath(
+  sections: NavSection[],
+  pathname: string,
+): NavSection | undefined {
+  return sections.find((s) =>
+    s.items.some(
+      (n) => pathname === n.href || pathname.startsWith(n.href + "/"),
+    ),
+  );
+}
+
 const HOME: Record<Role, string> = {
   admin: "/dashboard",
   receptionist: "/reception",

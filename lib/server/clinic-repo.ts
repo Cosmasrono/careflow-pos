@@ -3,7 +3,7 @@
 import { createHash, randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import type { Role } from "@/lib/auth/roles";
-import { hashPassword } from "@/lib/auth/password";
+import { generateTempPassword, hashPassword } from "@/lib/auth/password";
 import { mpesaConfigured } from "@/lib/server/mpesa";
 import type {
   BillingMode,
@@ -567,6 +567,11 @@ function cleanEmail(raw: string | undefined | null): string | null {
   return email || null;
 }
 
+/** Cheap format check — enough to catch typos typed into the setup form. */
+function validEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
 /** True when another user already owns this email (schema can't enforce it). */
 async function emailTaken(email: string, exceptId?: ID): Promise<boolean> {
   const owner = await prisma.user.findFirst({ where: { email } });
@@ -581,6 +586,7 @@ export async function userCount(): Promise<number> {
 export async function bootstrapAdmin(input: {
   name: string;
   username: string;
+  email: string;
   password: string;
 }): Promise<{ error: string } | { user: StaffUser }> {
   if ((await prisma.user.count()) > 0) {
@@ -590,9 +596,16 @@ export async function bootstrapAdmin(input: {
   if (!username || !input.name.trim() || !input.password) {
     return { error: "Name, username and password are all required." };
   }
+  // The first admin must have an email. There is no other admin who could
+  // reset their password, so the reset link is their only way back in.
+  const email = cleanEmail(input.email);
+  if (!email || !validEmail(email)) {
+    return { error: "A valid email address is required." };
+  }
   const user = await prisma.user.create({
     data: {
       username,
+      email,
       name: input.name.trim(),
       role: "admin",
       passwordHash: await hashPassword(input.password),
@@ -613,7 +626,7 @@ export async function createUser(input: {
   name: string;
   role: Role;
   password?: string;
-}): Promise<{ error: string } | { user: StaffUser }> {
+}): Promise<{ error: string } | { user: StaffUser; tempPassword: string }> {
   const username = input.username.trim().toLowerCase();
   if (!username || !input.name.trim()) {
     return { error: "Username and name are required." };
@@ -634,9 +647,9 @@ export async function createUser(input: {
     };
   }
 
-  // When no temporary password is provided, store a random one so the user
-  // must use the setup/reset email to choose their real password.
-  const bootstrapPassword = password || randomBytes(24).toString("base64url");
+  // When no temporary password is provided we generate a readable one and
+  // email it to the new user together with their username.
+  const bootstrapPassword = password || generateTempPassword();
 
   const user = await prisma.user.create({
     data: {
@@ -648,7 +661,7 @@ export async function createUser(input: {
       active: true,
     },
   });
-  return { user: mapUser(user) };
+  return { user: mapUser(user), tempPassword: bootstrapPassword };
 }
 
 export async function updateUser(input: {
@@ -698,6 +711,9 @@ export async function deleteUser(
 // --- password reset ----------------------------------------------------------
 
 const RESET_TTL_MS = 30 * 60 * 1000; // links live for 30 minutes
+// Setup links are emailed to someone who has no password yet and may not read
+// their mail the same day, so they get a much longer window than a reset.
+export const SETUP_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 function hashToken(token: string): string {
   return createHash("sha256").update(token).digest("hex");
@@ -711,6 +727,7 @@ function hashToken(token: string): string {
  */
 export async function createPasswordReset(
   rawEmail: string,
+  ttlMs: number = RESET_TTL_MS,
 ): Promise<{ token: string; to: string; name: string } | null> {
   const email = cleanEmail(rawEmail);
   if (!email) return null;
@@ -725,7 +742,7 @@ export async function createPasswordReset(
     data: {
       userId: user.id,
       tokenHash: hashToken(token),
-      expiresAt: new Date(Date.now() + RESET_TTL_MS),
+      expiresAt: new Date(Date.now() + ttlMs),
     },
   });
   return { token, to: email, name: user.name };

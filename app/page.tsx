@@ -3,6 +3,7 @@
 
 import Image from "next/image";
 import Link from "next/link";
+import { BrandLogo } from "@/components/BrandLogo";
 
 const SERVICES = [
   {
@@ -57,9 +58,7 @@ export default function LandingPage() {
       <header className="sticky top-0 z-20 border-b border-teal-950/5 bg-white/85 backdrop-blur-md">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3 sm:px-6">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-9 w-9 place-items-center rounded-xl bg-linear-to-br from-teal-500 to-teal-700 text-lg text-white shadow-inner shadow-white/20">
-              ✚
-            </span>
+            <BrandLogo />
             <div>
               <p className="font-display text-base font-semibold leading-tight text-teal-950">
                 CareFlow

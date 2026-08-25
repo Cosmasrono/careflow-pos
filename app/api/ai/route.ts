@@ -194,7 +194,9 @@ export async function POST(req: Request) {
           Authorization: `Bearer ${process.env.GROQ_API_KEY}`,
         },
         body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
+          // Groq retires model ids periodically; GROQ_MODEL overrides without
+          // a code change. Check https://api.groq.com/openai/v1/models.
+          model: process.env.GROQ_MODEL || "openai/gpt-oss-120b",
           temperature: 0.2,
           messages: [
             { role: "system", content: system },

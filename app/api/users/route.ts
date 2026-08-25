@@ -4,10 +4,7 @@ import { NextResponse } from "next/server";
 import * as repo from "@/lib/server/clinic-repo";
 import { getSession } from "@/lib/auth/session";
 import { hasPermission } from "@/lib/auth/roles";
-import {
-  mailConfigured,
-  sendAccountSetupEmail,
-} from "@/lib/server/mail";
+import { mailConfigured, sendCredentialsEmail } from "@/lib/server/mail";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,29 +37,38 @@ export async function POST(req: Request) {
     return NextResponse.json(result, { status: 400 });
   }
 
+  // Email the new account its sign-in details. Failing to send must not undo
+  // the account, so problems come back as a warning the admin can act on.
   let warning: string | undefined;
   if (result.user.email) {
     if (!mailConfigured()) {
       warning =
-        "User was created, but email is not configured, so no password setup link was sent.";
+        "User was created, but email is not configured, so the sign-in details were not sent.";
     } else {
       try {
-        const reset = await repo.createPasswordReset(result.user.email);
-        if (reset) {
-          const link = new URL(
-            `/reset-password?token=${reset.token}`,
-            process.env.APP_URL ?? new URL(req.url).origin,
-          ).toString();
-          await sendAccountSetupEmail({
-            to: reset.to,
-            name: reset.name,
-            link,
-          });
-        }
+        // A setup token lets them pick their own password straight from the
+        // email; the temporary password is the fallback if it lapses.
+        const reset = await repo.createPasswordReset(
+          result.user.email,
+          repo.SETUP_TTL_MS,
+        );
+        const origin = process.env.APP_URL ?? new URL(req.url).origin;
+        await sendCredentialsEmail({
+          to: result.user.email,
+          name: result.user.name,
+          username: result.user.username,
+          password: result.tempPassword,
+          setupLink: new URL(
+            reset
+              ? `/reset-password?token=${reset.token}`
+              : "/forgot-password",
+            origin,
+          ).toString(),
+        });
       } catch (err) {
-        console.error("account setup email failed", err);
+        console.error("credentials email failed", err);
         warning =
-          "User was created, but we could not send the password setup email.";
+          "User was created, but we could not email the sign-in details.";
       }
     }
   }

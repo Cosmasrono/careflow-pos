@@ -78,7 +78,7 @@ export default function UsersPage() {
     if (body.warning) {
       notify("error", body.warning);
     } else if (form.email.trim()) {
-      notify("success", "Password setup link sent by email.");
+      notify("success", `Password setup link emailed to ${form.email.trim()}.`);
     }
   };
 
@@ -260,7 +260,7 @@ export default function UsersPage() {
                 required
               />
             </Field>
-            <Field label="Email (for password resets)">
+            <Field label="Email (sign-in details are sent here)">
               <input
                 className={inputClass}
                 type="email"
@@ -288,7 +288,7 @@ export default function UsersPage() {
                 type="password"
                 value={form.password}
                 onChange={set("password")}
-                placeholder="Leave empty to require setup by email"
+                placeholder="Leave empty to generate one"
               />
             </Field>
             {error && (

@@ -1,6 +1,7 @@
 // Shared chrome for the logged-out pages (login, forgot/reset password):
 // the team photo with a teal wash, and the frosted card with the brand mark.
 import Image from "next/image";
+import { BrandLogo } from "./BrandLogo";
 
 export function AuthCard({ children }: { children: React.ReactNode }) {
   return (
@@ -17,9 +18,7 @@ export function AuthCard({ children }: { children: React.ReactNode }) {
       <div className="absolute inset-0 bg-linear-to-br from-teal-950/85 via-teal-950/70 to-teal-900/60" />
       <div className="relative w-full max-w-sm rounded-3xl border border-white/20 bg-white/95 p-6 shadow-2xl shadow-teal-950/40 backdrop-blur">
         <div className="mb-6 flex items-center gap-2.5">
-          <span className="grid h-10 w-10 place-items-center rounded-xl bg-linear-to-br from-teal-500 to-teal-700 text-lg text-white shadow-inner shadow-white/20">
-            ✚
-          </span>
+          <BrandLogo size="lg" />
           <div>
             <p className="font-display text-base font-semibold leading-tight text-teal-950">
               CareFlow

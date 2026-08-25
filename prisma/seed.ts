@@ -259,6 +259,16 @@ async function seedDemoPatients() {
 }
 
 async function main() {
+  // Targeted seeds for a live clinic, where the demo staff and demo patients
+  // below are not wanted. Both flags may be passed together.
+  const onlyCatalog = process.argv.includes("--catalog-only");
+  const onlyMedicines = process.argv.includes("--medicines-only");
+  if (onlyCatalog || onlyMedicines) {
+    if (onlyCatalog) await ensureServiceCatalog();
+    if (onlyMedicines) await ensureMedicines();
+    return;
+  }
+
   await ensureStaff();
   await ensureMedicines();
   await ensureServiceCatalog();

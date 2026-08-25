@@ -42,7 +42,7 @@ export default function LoginPage() {
 }
 
 function LoginForm() {
-  const [email, setEmail] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -55,7 +55,7 @@ function LoginForm() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ identifier, password }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -82,16 +82,16 @@ function LoginForm() {
         Sign in
       </h1>
       <p className="mb-5 text-sm text-zinc-500">
-        Enter the email and password your administrator gave you.
+        Enter the username or email and password your administrator gave you.
       </p>
       <form onSubmit={submit} className="flex flex-col gap-4">
-        <Field label="Email">
+        <Field label="Email or username">
           <input
             className={inputClass}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value)}
             autoFocus
-            autoComplete="email"
+            autoComplete="username"
             required
           />
         </Field>
@@ -128,6 +128,7 @@ function LoginForm() {
 function SetupForm() {
   const [name, setName] = useState("");
   const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -140,7 +141,7 @@ function SetupForm() {
       const res = await fetch("/api/auth/bootstrap", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, username, password }),
+        body: JSON.stringify({ name, username, email, password }),
       });
       if (!res.ok) {
         const body = (await res.json().catch(() => ({}))) as { error?: string };
@@ -166,7 +167,8 @@ function SetupForm() {
       </h1>
       <p className="mb-5 text-sm text-zinc-500">
         This is the first time the system is opened. Create the administrator
-        account. You&apos;ll use it to add the rest of your staff.
+        account. You&apos;ll use it to add the rest of your staff. The email is
+        where a reset link goes if you ever forget the password.
       </p>
       <form onSubmit={submit} className="flex flex-col gap-4">
         <Field label="Your full name">
@@ -185,6 +187,17 @@ function SetupForm() {
             onChange={(e) => setUsername(e.target.value)}
             placeholder="e.g. admin"
             autoComplete="username"
+            required
+          />
+        </Field>
+        <Field label="Your email address">
+          <input
+            className={inputClass}
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@clinic.example"
+            autoComplete="email"
             required
           />
         </Field>

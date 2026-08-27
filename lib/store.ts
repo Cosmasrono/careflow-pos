@@ -215,6 +215,20 @@ export async function addServiceOrder(
   return error;
 }
 
+/** Send every selected lab/radiology/procedure request as one clinical handoff. */
+export async function addServiceOrders(
+  visitId: ID,
+  serviceItemIds: ID[],
+  instructions?: string,
+) {
+  const { error } = await act("addServiceOrders", {
+    visitId,
+    serviceItemIds,
+    instructions,
+  });
+  return error;
+}
+
 export function addPrescription(
   visitId: ID,
   meds: Omit<Med, "id" | "dispensed">[],

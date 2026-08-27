@@ -18,6 +18,13 @@ const STAGES: { location: VisitLocation; href: string }[] = [
   { location: "pharmacy", href: "/pharmacy" },
 ];
 
+const QUICK_ACTIONS = [
+  { href: "/reception", label: "Check in patient", detail: "Find or register a patient" },
+  { href: "/flow", label: "View patient flow", detail: "See delays across the clinic" },
+  { href: "/admin/reconciliation", label: "Reconcile payments", detail: "Compare cash and M-Pesa" },
+  { href: "/admin/medicines", label: "Review stock", detail: "Update medicines and prices" },
+];
+
 export default function Dashboard() {
   const data = useClinic();
   const count = (location: VisitLocation) =>
@@ -64,6 +71,27 @@ export default function Dashboard() {
           <p className="mt-1 text-2xl font-semibold">{completedToday}</p>
         </Card>
       </div>
+
+      <section className="mt-6" aria-labelledby="quick-actions-title">
+        <h2 id="quick-actions-title" className="mb-3 text-sm font-semibold text-teal-950">
+          Common tasks
+        </h2>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {QUICK_ACTIONS.map((action) => (
+            <Link
+              key={action.href}
+              href={action.href}
+              className="group rounded-2xl border border-teal-950/[0.07] bg-white p-4 shadow-sm transition hover:-translate-y-0.5 hover:border-teal-600/30 hover:shadow-md"
+            >
+              <div className="flex items-center justify-between gap-3">
+                <p className="font-semibold text-teal-950">{action.label}</p>
+                <span aria-hidden className="text-teal-600 transition-transform group-hover:translate-x-1">→</span>
+              </div>
+              <p className="mt-1 text-sm text-zinc-500">{action.detail}</p>
+            </Link>
+          ))}
+        </div>
+      </section>
 
       <Card className="mt-6">
         <h2 className="text-sm font-semibold text-zinc-700">

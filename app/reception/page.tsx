@@ -79,6 +79,12 @@ export default function ReceptionPage() {
 
       <InClinicStrip />
 
+      <NextTask
+        paymentCount={paymentCount}
+        triageCount={triageCount}
+        onSelect={setTab}
+      />
+
       <TabBar
         tab={tab}
         onChange={setTab}
@@ -119,16 +125,22 @@ function TabBar({
     { id: "patients", label: "Patients", count: patientCount },
   ];
   return (
-    <div className="mb-6 flex gap-1 rounded-xl border border-zinc-200 bg-zinc-50 p-1">
+    <div
+      role="tablist"
+      aria-label="Reception tasks"
+      className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-zinc-200 bg-zinc-50 p-1"
+    >
       {tabs.map((t) => {
         const active = tab === t.id;
         return (
           <button
             key={t.id}
             type="button"
+            role="tab"
+            aria-selected={active}
             onClick={() => onChange(t.id)}
             className={cn(
-              "flex flex-1 items-center justify-center gap-2 rounded-lg py-2 text-sm font-medium transition-colors",
+              "flex min-h-10 min-w-max flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
               active
                 ? "bg-white text-zinc-900 shadow-sm"
                 : "text-zinc-500 hover:text-zinc-700",
@@ -150,6 +162,53 @@ function TabBar({
           </button>
         );
       })}
+    </div>
+  );
+}
+
+function NextTask({
+  paymentCount,
+  triageCount,
+  onSelect,
+}: {
+  paymentCount: number;
+  triageCount: number;
+  onSelect: (tab: Tab) => void;
+}) {
+  const task = paymentCount > 0
+    ? {
+        tab: "payments" as const,
+        eyebrow: "Needs attention",
+        title: `${paymentCount} ${paymentCount === 1 ? "patient is" : "patients are"} waiting to pay`,
+        detail: "Collect the outstanding charge so the patient can continue to the next station.",
+        action: "Open payments",
+      }
+    : triageCount > 0
+      ? {
+          tab: "triage" as const,
+          eyebrow: "Next task",
+          title: `${triageCount} ${triageCount === 1 ? "patient is" : "patients are"} ready for triage`,
+          detail: "Record vitals and priority, then send the patient to the assigned doctor.",
+          action: "Start triage",
+        }
+      : {
+          tab: "checkin" as const,
+          eyebrow: "Reception ready",
+          title: "Check in the next patient",
+          detail: "Search first to avoid duplicate records, then register only if the patient is new.",
+          action: "Find patient",
+        };
+
+  return (
+    <div className="mb-4 flex flex-col gap-3 rounded-2xl border border-teal-700/15 bg-teal-50/90 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">{task.eyebrow}</p>
+        <p className="mt-1 font-semibold text-teal-950">{task.title}</p>
+        <p className="mt-1 text-sm text-teal-900/65">{task.detail}</p>
+      </div>
+      <Button className="shrink-0" onClick={() => onSelect(task.tab)}>
+        {task.action} <span aria-hidden>→</span>
+      </Button>
     </div>
   );
 }
@@ -588,6 +647,7 @@ function PaymentCard({
 }) {
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [reference, setReference] = useState("");
+  const [cashReceived, setCashReceived] = useState("");
   const [phone, setPhone] = useState(patientPhone);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -600,7 +660,15 @@ function PaymentCard({
   // Cash needs no reference; a typed-in M-Pesa or card payment must be
   // traceable to a receipt.
   const needsReference = method !== "cash" && !stkFlow;
-  const ready = !busy && (!needsReference || reference.trim() !== "");
+  const cashAmount = Number(cashReceived);
+  const cashValid =
+    method !== "cash" ||
+    (cashReceived.trim() !== "" &&
+      Number.isFinite(cashAmount) &&
+      cashAmount >= total);
+  const change = method === "cash" && cashValid ? cashAmount - total : 0;
+  const ready =
+    !busy && cashValid && (!needsReference || reference.trim() !== "");
 
   const gate =
     visit.status === "awaiting-consult-payment"
@@ -681,6 +749,7 @@ function PaymentCard({
             value={method}
             onChange={(e) => {
               setMethod(e.target.value as PaymentMethod);
+              setCashReceived("");
               resetStk();
               setError(null);
             }}
@@ -692,7 +761,20 @@ function PaymentCard({
             ))}
           </select>
         </Field>
-        {stkFlow ? (
+        {method === "cash" ? (
+          <Field label="Cash received (KSh)">
+            <input
+              className={inputClass}
+              type="number"
+              min={0}
+              step="0.01"
+              inputMode="decimal"
+              placeholder={`At least ${total.toLocaleString("en-KE")}`}
+              value={cashReceived}
+              onChange={(e) => setCashReceived(e.target.value)}
+            />
+          </Field>
+        ) : stkFlow ? (
           <Field label="Patient phone (Safaricom)">
             <input
               className={inputClass}
@@ -721,6 +803,22 @@ function PaymentCard({
           </Field>
         )}
       </div>
+
+      {method === "cash" && cashReceived.trim() !== "" && (
+        cashValid ? (
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-teal-50 p-3 text-sm text-teal-900">
+            <span>Change to return</span>
+            <strong className="tabular-nums">{money(change)}</strong>
+          </div>
+        ) : (
+          <div className="mt-3 flex items-center justify-between rounded-lg bg-red-50 p-3 text-sm text-red-700">
+            <span>Cash is short by</span>
+            <strong className="tabular-nums">
+              {money(Math.max(0, total - (Number.isFinite(cashAmount) ? cashAmount : 0)))}
+            </strong>
+          </div>
+        )
+      )}
 
       {shownError && (
         <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -776,7 +874,13 @@ function PaymentCard({
             ? "Recording…"
             : needsReference && !reference.trim()
               ? "Enter the payment reference"
-              : `Take ${money(total)}`}
+              : method === "cash" && !cashReceived.trim()
+                ? "Enter cash received"
+                : method === "cash" && !cashValid
+                  ? "Cash received is not enough"
+              : method === "cash" && cashValid && change > 0
+                ? `Take cash · return ${money(change)}`
+                : `Take ${money(total)}`}
         </Button>
       )}
     </Card>

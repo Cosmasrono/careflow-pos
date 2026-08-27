@@ -29,7 +29,13 @@ body {
 }
 
 @media print {
+  @page {
+    margin: 12mm;
+  }
+
+  html,
   body {
+    min-height: 0;
     background: #fff;
   }
 
@@ -41,15 +47,28 @@ body {
 
   #payment-receipt,
   #payment-receipt * {
-    visibility: visible;
+    visibility: visible !important;
   }
 
   #payment-receipt {
-    position: absolute;
-    inset: 0;
-    width: 100%;
+    display: block !important;
+    position: fixed !important;
+    z-index: 2147483647;
+    inset: 0 !important;
+    width: auto;
+    min-height: 100vh;
+    margin: 0;
+    padding: 0;
     border: 0;
-    background: #fff;
-    color: #18181b;
+    background: #fff !important;
+    color: #18181b !important;
+  }
+
+  #payment-receipt > div {
+    display: block !important;
+    margin: 0 !important;
+    border: 1px solid #d4d4d8 !important;
+    box-shadow: none !important;
+    break-inside: avoid;
   }
 }

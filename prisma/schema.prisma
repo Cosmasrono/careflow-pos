@@ -22,12 +22,13 @@ type Vitals {
 }
 
 type Med {
-  id        String
-  name      String
-  dosage    String
-  frequency String
-  duration  String
-  dispensed Boolean
+  id         String
+  medicineId String? // exact Medicine catalog item; null only on legacy prescriptions
+  name       String
+  dosage     String
+  frequency  String
+  duration   String
+  dispensed  Boolean
 }
 
 // One step of a visit's journey: when the visit entered each status. The
@@ -56,7 +57,7 @@ type VisitPayment {
   reference String?
   paidAt    DateTime
   covers    String[] // Charge ids settled by this payment
-  takenBy   String?  // staff username at time of payment (for audit)
+  takenBy   String? // staff username at time of payment (for audit)
 }
 
 // One billable line on a visit. Added as the patient moves through:
@@ -69,9 +70,9 @@ type Charge {
   type        String // consultation | lab | radiology | procedure | pharmacy | misc
   description String
   amount      Float
-  paid        Boolean  @default(false)
+  paid        Boolean   @default(false)
   paidAt      DateTime?
-  paymentId   String?  // id of the VisitPayment that settled this charge
+  paymentId   String? // id of the VisitPayment that settled this charge
   createdAt   DateTime
 }
 
@@ -149,24 +150,24 @@ model Patient {
 }
 
 model Visit {
-  id               String   @id @default(auto()) @map("_id") @db.ObjectId
-  patient          Patient  @relation(fields: [patientId], references: [id])
-  patientId        String   @db.ObjectId
+  id               String         @id @default(auto()) @map("_id") @db.ObjectId
+  patient          Patient        @relation(fields: [patientId], references: [id])
+  patientId        String         @db.ObjectId
   vitals           Vitals
   priority         String?
-  complaint        String   @default("")
-  assignedDoctorId String?    @db.ObjectId // references a User with role "doctor"
+  complaint        String         @default("")
+  assignedDoctorId String?        @db.ObjectId // references a User with role "doctor"
   status           String
   timeline         StageEvent[] // timestamped status history, check-in → completed
   // Snapshotted at check-in so a mid-visit billing-mode change on the clinic
   // settings never retroactively rewrites how this visit is charged.
-  billingMode      String   @default("per-stage") // per-stage | pay-at-end
-  charges          Charge[]        // every billable line added during the visit
-  payments         VisitPayment[]  // every payment event on the visit
-  payment          Payment?        // legacy single-payment (old records only)
+  billingMode      String         @default("per-stage") // per-stage | pay-at-end
+  charges          Charge[] // every billable line added during the visit
+  payments         VisitPayment[] // every payment event on the visit
+  payment          Payment? // legacy single-payment (old records only)
   saleItems        SaleItem[] // what the pharmacy actually sold at checkout
-  createdAt        DateTime   @default(now())
-  updatedAt        DateTime   @updatedAt
+  createdAt        DateTime       @default(now())
+  updatedAt        DateTime       @updatedAt
   orders           Order[]
 }
 
@@ -246,23 +247,23 @@ model ActivityRequest {
 }
 
 model Order {
-  id           String    @id @default(auto()) @map("_id") @db.ObjectId
-  visit        Visit     @relation(fields: [visitId], references: [id])
-  visitId      String    @db.ObjectId
-  type         String
-  title        String
-  instructions String?
-  status       String
+  id            String      @id @default(auto()) @map("_id") @db.ObjectId
+  visit         Visit       @relation(fields: [visitId], references: [id])
+  visitId       String      @db.ObjectId
+  type          String
+  title         String
+  instructions  String?
+  status        String
   // Which catalog service was ordered — supplies the price and, for labs, the
   // parameter panel. Prescriptions leave this null.
-  serviceItemId String?  @db.ObjectId
+  serviceItemId String?     @db.ObjectId
   // Structured lab results (one entry per parameter). Radiology / procedure
   // still use free-text `result` below.
-  results      LabResult[]
-  result       String?
-  meds         Med[]
-  createdAt    DateTime  @default(now())
-  completedAt  DateTime?
+  results       LabResult[]
+  result        String?
+  meds          Med[]
+  createdAt     DateTime    @default(now())
+  completedAt   DateTime?
 }
 
 // Singleton clinic-wide settings. Read via `findFirst` and created lazily on

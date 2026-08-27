@@ -86,6 +86,7 @@ export interface Visit {
 /** A single prescribed medicine line (what the doctor wrote). */
 export interface Med {
   id: ID;
+  medicineId?: ID; // exact pharmacy catalog item; absent on legacy records
   name: string;
   dosage: string; // e.g. "500mg"
   frequency: string; // e.g. "twice daily"

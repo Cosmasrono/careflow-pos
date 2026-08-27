@@ -911,6 +911,57 @@ export async function addServiceOrder(input: {
   });
 }
 
+/** Create a doctor''s complete set of service requests before moving the patient. */
+export async function addServiceOrders(input: {
+  visitId: ID;
+  serviceItemIds: ID[];
+  instructions?: string;
+}): Promise<{ error: string } | void> {
+  const ids = [...new Set(input.serviceItemIds ?? [])];
+  if (ids.length === 0) return { error: "Select at least one service." };
+
+  const [visit, items] = await Promise.all([
+    prisma.visit.findUnique({ where: { id: input.visitId } }),
+    prisma.serviceItem.findMany({ where: { id: { in: ids }, active: true } }),
+  ]);
+  if (!visit) return { error: "Visit not found." };
+  if (items.length !== ids.length) {
+    return { error: "One of the selected services is no longer available." };
+  }
+
+  await prisma.order.createMany({
+    data: items.map((item) => ({
+      visitId: input.visitId,
+      type: item.orderType,
+      title: item.name,
+      instructions: input.instructions?.trim() || null,
+      status: "requested",
+      serviceItemId: item.id,
+      results: [],
+      meds: [],
+    })),
+  });
+
+  const charges = items.reduce(
+    (all, item) =>
+      item.price > 0
+        ? [...all, newCharge(item.orderType as ChargeType, item.name, item.price)]
+        : all,
+    [...visit.charges],
+  );
+  const owesForServices = unpaid(charges).some((c) =>
+    SERVICE_CHARGE_TYPES.includes(c.type as ChargeType),
+  );
+  const status: VisitStatus =
+    visit.billingMode === "per-stage" && owesForServices
+      ? "awaiting-lab-payment"
+      : "awaiting-services";
+  await prisma.visit.update({
+    where: { id: input.visitId },
+    data: { charges: { set: charges }, status, timeline: stage(status) },
+  });
+}
+
 /** Take money for some of a visit's outstanding charges — reception's two
  *  pay-gates both come through here. Records one VisitPayment covering the
  *  settled lines, then releases the patient if that clears their gate. */
@@ -1061,13 +1112,22 @@ export async function completeServiceOrder(input: {
         where: { id: existing.serviceItemId },
       })
     : null;
-  const ranges = new Map(item?.parameters.map((p) => [p.name, p]) ?? []);
+  const requiredParameters = item?.parameters ?? [];
+  const submitted = new Map(
+    (input.results ?? []).map((result) => [result.parameter, result.value?.trim() ?? ""]),
+  );
+  if (
+    requiredParameters.length > 0 &&
+    requiredParameters.some((parameter) => !submitted.get(parameter.name))
+  ) {
+    return { error: "Complete every required result before returning the patient." };
+  }
+  const ranges = new Map(requiredParameters.map((p) => [p.name, p]));
 
-  const results = (input.results ?? [])
-    .filter((r) => r.value?.trim())
-    .map((r) => {
-      const range = ranges.get(r.parameter);
-      const value = Number(r.value);
+  const results = requiredParameters.map((parameter) => {
+      const resultValue = submitted.get(parameter.name) ?? "";
+      const range = ranges.get(parameter.name);
+      const value = Number(resultValue);
       let flag: LabResult["flag"];
       // Qualitative results ("positive") simply carry no flag.
       if (range && Number.isFinite(value)) {
@@ -1075,7 +1135,7 @@ export async function completeServiceOrder(input: {
         else if (range.refHigh != null && value > range.refHigh) flag = "high";
         else if (range.refLow != null || range.refHigh != null) flag = "normal";
       }
-      return { parameter: r.parameter, value: r.value.trim(), flag: flag ?? null };
+      return { parameter: parameter.name, value: resultValue, flag: flag ?? null };
     });
 
   const freeText = input.result?.trim();

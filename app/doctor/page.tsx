@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { PlusIcon, Trash2Icon } from "lucide-react";
 import {
   addPrescription,
-  addServiceOrder,
+  addServiceOrders,
   assignVisitDoctor,
   sendToPharmacy,
   setVisitComplaint,
@@ -466,6 +467,22 @@ function ComplaintEditor({
   onSave: () => void;
 }) {
   const dirty = text.trim() !== initial.trim();
+  const entries = text.split("\n");
+
+  const updateEntry = (index: number, value: string) => {
+    onTextChange(
+      entries
+        .map((entry, entryIndex) =>
+          entryIndex === index ? value : entry,
+        )
+        .join("\n"),
+    );
+  };
+
+  const removeEntry = (index: number) => {
+    const next = entries.filter((_, entryIndex) => entryIndex !== index);
+    onTextChange(next.length > 0 ? next.join("\n") : "");
+  };
 
   // Persist whenever the doctor is done with the field (blur), not only on an
   // explicit Save — otherwise the complaint is lost when they type it and go
@@ -474,18 +491,54 @@ function ComplaintEditor({
 
   return (
     <Field label="Complaint / history (recorded by doctor)">
-      <div className="flex gap-2">
-        <input
-          className={`${inputClass} flex-1`}
-          placeholder="e.g. Fever and headache for 3 days"
-          value={text}
-          onChange={(e) => onTextChange(e.target.value)}
-          onBlur={save}
-          onKeyDown={(e) => e.key === "Enter" && save()}
-        />
-        <Button variant="secondary" disabled={!dirty} onClick={save}>
-          Save
-        </Button>
+      <div className="flex flex-col gap-2">
+        {entries.map((entry, index) => (
+          <div key={index} className="flex gap-2">
+            <input
+              className={`${inputClass} flex-1`}
+              placeholder={
+                index === 0
+                  ? "e.g. Fever and headache for 3 days"
+                  : "Add another complaint or history note"
+              }
+              value={entry}
+              onChange={(e) => updateEntry(index, e.target.value)}
+              onBlur={save}
+              onKeyDown={(e) => e.key === "Enter" && save()}
+            />
+            {entries.length > 1 && (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                title="Remove entry"
+                aria-label={`Remove complaint or history entry ${index + 1}`}
+                onClick={() => removeEntry(index)}
+              >
+                <Trash2Icon className="size-4" />
+              </Button>
+            )}
+          </div>
+        ))}
+        <div className="flex gap-2">
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => onTextChange(text ? `${text}\n` : "\n")}
+          >
+            <PlusIcon className="size-4" />
+            Add entry
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!dirty}
+            onClick={save}
+          >
+            Save
+          </Button>
+        </div>
       </div>
     </Field>
   );
@@ -497,21 +550,22 @@ function ComplaintEditor({
 function ServiceOrderForm({ visitId }: { visitId: string }) {
   const data = useClinic();
   const [type, setType] = useState<Exclude<OrderType, "prescription">>("lab");
-  const [serviceItemId, setServiceItemId] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [instructions, setInstructions] = useState("");
   const [busy, setBusy] = useState(false);
 
   const available = data.serviceCatalog.filter((s) => s.orderType === type);
-  const picked = available.find((s) => s.id === serviceItemId);
+  const selected = data.serviceCatalog.filter((s) => selectedIds.includes(s.id));
+  const total = selected.reduce((sum, item) => sum + item.price, 0);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!picked) return;
+    if (selectedIds.length === 0) return;
     setBusy(true);
-    const error = await addServiceOrder(visitId, picked.id, instructions);
+    const error = await addServiceOrders(visitId, selectedIds, instructions);
     setBusy(false);
     if (error) return;
-    setServiceItemId("");
+    setSelectedIds([]);
     setInstructions("");
   };
 
@@ -524,7 +578,7 @@ function ServiceOrderForm({ visitId }: { visitId: string }) {
           value={type}
           onChange={(e) => {
             setType(e.target.value as typeof type);
-            setServiceItemId(""); // the old pick belongs to the old department
+            setSelectedIds([]);
           }}
         >
           <option value="lab">Lab</option>
@@ -532,26 +586,31 @@ function ServiceOrderForm({ visitId }: { visitId: string }) {
           <option value="procedure">Procedure</option>
         </select>
       </Field>
-      <Field label="Test / procedure">
+      <Field label="Select all required tests / procedures">
         {available.length === 0 ? (
           <p className="rounded-lg bg-amber-50 p-3 text-xs text-amber-800">
             Nothing in the catalog for this department yet — an admin adds
             these under Service catalog.
           </p>
         ) : (
-          <select
-            className={inputClass}
-            value={serviceItemId}
-            onChange={(e) => setServiceItemId(e.target.value)}
-          >
-            <option value="">Choose…</option>
+          <div className="grid gap-2 sm:grid-cols-2">
             {available.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-                {s.price > 0 ? ` — KSh ${s.price.toLocaleString("en-KE")}` : " — free"}
-              </option>
+              <label key={s.id} className={cn(
+                "flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm",
+                selectedIds.includes(s.id) ? "border-teal-500 bg-teal-50" : "border-zinc-200 bg-white",
+              )}>
+                <input
+                  type="checkbox"
+                  className="mt-1 accent-teal-700"
+                  checked={selectedIds.includes(s.id)}
+                  onChange={() => setSelectedIds((ids) =>
+                    ids.includes(s.id) ? ids.filter((id) => id !== s.id) : [...ids, s.id]
+                  )}
+                />
+                <span><strong>{s.name}</strong><span className="block text-xs text-zinc-500">{s.price > 0 ? `KSh ${s.price.toLocaleString("en-KE")}` : "Free"}</span></span>
+              </label>
             ))}
-          </select>
+          </div>
         )}
       </Field>
       <Field label="Instructions (optional)">
@@ -561,10 +620,13 @@ function ServiceOrderForm({ visitId }: { visitId: string }) {
           onChange={(e) => setInstructions(e.target.value)}
         />
       </Field>
-      <Button type="submit" variant="secondary" disabled={!picked || busy}>
-        {picked && picked.price > 0
-          ? `Add order — KSh ${picked.price.toLocaleString("en-KE")}`
-          : "Add order"}
+      {selected.length > 0 && (
+        <p className="rounded-xl bg-teal-50 p-3 text-sm text-teal-900">
+          <strong>{selected.length} selected</strong> · Total charge KSh {total.toLocaleString("en-KE")}
+        </p>
+      )}
+      <Button type="submit" variant="secondary" disabled={selectedIds.length === 0 || busy}>
+        {busy ? "Sending requests…" : `Send ${selectedIds.length || ""} request${selectedIds.length === 1 ? "" : "s"}`}
       </Button>
     </form>
   );
@@ -579,18 +641,22 @@ const blankMed: MedDraft = {
 };
 
 function PrescriptionForm({ visitId }: { visitId: string }) {
+  const data = useClinic();
   const [meds, setMeds] = useState<MedDraft[]>([{ ...blankMed }]);
+  const [busy, setBusy] = useState(false);
 
   const update = (i: number, k: keyof MedDraft, value: string) =>
     setMeds((list) =>
       list.map((m, idx) => (idx === i ? { ...m, [k]: value } : m)),
     );
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const valid = meds.filter((m) => m.name.trim());
+    const valid = meds.filter((m) => m.medicineId && m.name.trim() && m.dosage.trim() && m.frequency.trim() && m.duration.trim());
     if (valid.length === 0) return;
-    addPrescription(visitId, valid);
+    setBusy(true);
+    await addPrescription(visitId, valid);
+    setBusy(false);
     setMeds([{ ...blankMed }]);
   };
 
@@ -599,12 +665,25 @@ function PrescriptionForm({ visitId }: { visitId: string }) {
       <h3 className="text-sm font-semibold text-zinc-700">Prescribe</h3>
       {meds.map((m, i) => (
         <div key={i} className="grid grid-cols-2 gap-2">
-          <input
+          <select
             className={inputClass}
-            placeholder="Medicine"
-            value={m.name}
-            onChange={(e) => update(i, "name", e.target.value)}
-          />
+            value={m.medicineId ?? ""}
+            onChange={(e) => {
+              const item = data.medicines.find((medicine) => medicine.id === e.target.value);
+              setMeds((list) => list.map((line, idx) => idx === i ? {
+                ...line,
+                medicineId: item?.id,
+                name: item ? `${item.name} ${item.strength}`.trim() : "",
+              } : line));
+            }}
+          >
+            <option value="">Choose medicine…</option>
+            {data.medicines.map((medicine) => (
+              <option key={medicine.id} value={medicine.id} disabled={medicine.stock <= 0}>
+                {medicine.name} {medicine.strength} · {medicine.stock > 0 ? `${medicine.stock} in stock` : "out of stock"}
+              </option>
+            ))}
+          </select>
           <input
             className={inputClass}
             placeholder="Dosage"
@@ -634,8 +713,8 @@ function PrescriptionForm({ visitId }: { visitId: string }) {
         >
           + Add medicine
         </Button>
-        <Button type="submit" variant="secondary" size="sm">
-          Save prescription
+        <Button type="submit" variant="secondary" size="sm" disabled={busy || !meds.some((m) => m.medicineId && m.dosage && m.frequency && m.duration)}>
+          {busy ? "Saving…" : "Save prescription"}
         </Button>
       </div>
     </form>

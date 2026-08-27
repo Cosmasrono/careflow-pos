@@ -40,6 +40,8 @@ export default function UsersPage() {
   const [form, setForm] = useState(emptyForm);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userToDelete, setUserToDelete] = useState<StaffUser | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -111,9 +113,7 @@ export default function UsersPage() {
   };
 
   const removeUser = async (u: StaffUser) => {
-    const proceed = confirm(`Delete ${u.name}? This cannot be undone.`);
-    if (!proceed) return;
-
+    setDeleting(true);
     const res = await fetch("/api/users", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -122,9 +122,12 @@ export default function UsersPage() {
     if (!res.ok) {
       const body = (await res.json().catch(() => ({}))) as { error?: string };
       notify("error", body.error ?? "Could not delete user.");
+      setDeleting(false);
       return;
     }
     setUsers((await res.json()).users);
+    setDeleting(false);
+    setUserToDelete(null);
     notify("success", "User deleted.");
   };
 
@@ -222,7 +225,7 @@ export default function UsersPage() {
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => removeUser(u)}
+                            onClick={() => setUserToDelete(u)}
                           >
                             Delete
                           </Button>
@@ -300,6 +303,43 @@ export default function UsersPage() {
           </form>
         </Card>
       </div>
+
+      {userToDelete && (
+        <div
+          className="fixed inset-0 z-80 grid place-items-center bg-teal-950/55 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="delete-user-title"
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">
+            <p className="text-xs font-semibold uppercase tracking-wide text-red-600">
+              Permanent action
+            </p>
+            <h2 id="delete-user-title" className="mt-2 text-xl font-semibold text-zinc-900">
+              Delete {userToDelete.name}?
+            </h2>
+            <p className="mt-2 text-sm leading-6 text-zinc-600">
+              This removes the staff account and they will no longer be able to sign in. Historical records keep the name already recorded on them.
+            </p>
+            <div className="mt-6 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button
+                variant="secondary"
+                onClick={() => setUserToDelete(null)}
+                disabled={deleting}
+              >
+                Keep account
+              </Button>
+              <Button
+                variant="danger"
+                onClick={() => removeUser(userToDelete)}
+                disabled={deleting}
+              >
+                {deleting ? <><Spinner /> Deleting…</> : "Delete account"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

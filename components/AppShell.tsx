@@ -14,6 +14,7 @@ import {
 import { RouteLoadingOverlay } from "./PageLoadGate";
 import { AiAssistant } from "./AiAssistant";
 import { BrandLogo } from "./BrandLogo";
+import { MenuIcon, XIcon } from "lucide-react";
 
 const PAGE_BG: { prefix: string; img: string }[] = [
   { prefix: "/dashboard", img: "/images/ward.jpg" },
@@ -47,6 +48,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const [navigating, startNavigation] = useTransition();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const session = useSession();
 
   if (pathname === "/" || pathname === "/login" || !session) {
@@ -65,6 +67,7 @@ export function AppShell({ children }: { children: ReactNode }) {
     }
     e.preventDefault();
     if (href === pathname) return;
+    setMobileMenuOpen(false);
     startNavigation(() => router.push(href));
   }
 
@@ -128,34 +131,15 @@ export function AppShell({ children }: { children: ReactNode }) {
             <span className="font-display font-semibold">CareFlow</span>
           </div>
           <button
-            onClick={logout}
-            className="text-sm font-medium text-teal-300 hover:text-white"
+            type="button"
+            onClick={() => setMobileMenuOpen(true)}
+            aria-label="Open navigation"
+            aria-expanded={mobileMenuOpen}
+            className="grid size-10 place-items-center rounded-xl text-teal-100 hover:bg-white/10"
           >
-            Sign out
+            <MenuIcon className="size-5" />
           </button>
         </header>
-        <nav className="flex gap-1 overflow-x-auto bg-teal-950 px-2 pb-1.5 sm:hidden print:!hidden">
-          {sections.map((section) => {
-            const active = current?.key === section.key;
-            const href = section.items[0].href;
-            const face = sectionFace(section);
-            return (
-              <Link
-                key={section.key}
-                href={href}
-                onClick={(e) => navigate(e, href)}
-                className={cn(
-                  "whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-medium",
-                  active
-                    ? "bg-white/15 text-white ring-1 ring-inset ring-white/10"
-                    : "text-teal-200/75 hover:bg-white/5 hover:text-white",
-                )}
-              >
-                {face.label}
-              </Link>
-            );
-          })}
-        </nav>
 
         <main className="relative flex-1">
           {bg && (
@@ -184,6 +168,67 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="print:hidden">
         <AiAssistant />
       </div>
+
+      {mobileMenuOpen && (
+        <div className="fixed inset-0 z-80 sm:hidden print:hidden">
+          <button
+            type="button"
+            aria-label="Close navigation"
+            className="absolute inset-0 bg-teal-950/55 backdrop-blur-sm"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+          <aside
+            aria-label="Main navigation"
+            className="absolute right-0 top-0 flex h-full w-[min(86vw,340px)] flex-col bg-teal-950 p-4 text-white shadow-2xl"
+          >
+            <div className="flex items-center justify-between border-b border-white/10 pb-4">
+              <div>
+                <p className="font-semibold">{session.name}</p>
+                <p className="text-xs text-teal-300">{ROLE_LABELS[session.role]}</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setMobileMenuOpen(false)}
+                aria-label="Close navigation"
+                className="grid size-10 place-items-center rounded-xl hover:bg-white/10"
+              >
+                <XIcon className="size-5" />
+              </button>
+            </div>
+
+            <nav className="mt-4 flex flex-1 flex-col gap-2 overflow-y-auto">
+              {sections.map((section) => {
+                const active = current?.key === section.key;
+                const href = section.items[0].href;
+                const face = sectionFace(section);
+                return (
+                  <Link
+                    key={section.key}
+                    href={href}
+                    onClick={(e) => navigate(e, href)}
+                    aria-current={active ? "page" : undefined}
+                    className={cn(
+                      "flex min-h-12 items-center gap-3 rounded-xl px-4 text-sm font-medium",
+                      active ? "bg-white/15 text-white" : "text-teal-100 hover:bg-white/10",
+                    )}
+                  >
+                    <span aria-hidden className="text-lg">{face.icon}</span>
+                    {face.label}
+                  </Link>
+                );
+              })}
+            </nav>
+
+            <button
+              type="button"
+              onClick={logout}
+              className="mt-4 min-h-11 rounded-xl border border-white/15 px-4 text-left text-sm font-medium text-teal-100 hover:bg-white/10"
+            >
+              Sign out
+            </button>
+          </aside>
+        </div>
+      )}
     </div>
     </>
 

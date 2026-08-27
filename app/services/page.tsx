@@ -40,7 +40,7 @@ export default function ServicesPage() {
     <div>
       <PageHeader
         title="Lab / Radiology / Procedures"
-        subtitle="Outstanding service orders. Enter a result to send the patient back to the doctor."
+        subtitle="Complete only the tests requested by the doctor, then return the patient for review."
       />
 
       <div className="mb-4 flex gap-2">
@@ -95,12 +95,18 @@ function ResultCard({
   const [values, setValues] = useState<Record<string, string>>({});
   const [freeText, setFreeText] = useState("");
   const [busy, setBusy] = useState(false);
+  const [reviewing, setReviewing] = useState(false);
 
   const status = order.status;
   const locked = status === "requested";
   const panel = parameters.length > 0;
+  const completedFields = panel
+    ? parameters.filter((p) => values[p.name]?.trim()).length
+    : freeText.trim()
+      ? 1
+      : 0;
   const filled = panel
-    ? parameters.some((p) => values[p.name]?.trim())
+    ? parameters.every((p) => values[p.name]?.trim())
     : freeText.trim() !== "";
 
   const file = async () => {
@@ -125,6 +131,9 @@ function ResultCard({
     <Card>
       <div className="flex items-start justify-between">
         <div>
+          <p className="text-xs font-semibold uppercase text-teal-700">
+            Doctor requested
+          </p>
           <p className="font-medium">{order.title}</p>
           <p className="text-xs text-zinc-500">
             {patient} · <span className="capitalize">{order.type}</span>
@@ -133,43 +142,79 @@ function ResultCard({
         <StatusBadge status={status} />
       </div>
       {order.instructions && (
-        <p className="mt-2 text-xs text-zinc-500">Note: {order.instructions}</p>
+        <div className="mt-2 rounded-lg bg-sky-50 p-3 text-sm text-sky-900">
+          <span className="font-medium">Doctor&apos;s note:</span>{" "}
+          {order.instructions}
+        </div>
       )}
       {locked && (
+        <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">Step 1</p>
+          <p className="mt-1 text-sm text-amber-900">Confirm that the sample or patient has been received before entering findings.</p>
         <Button
           className="mt-3 w-full"
           variant="secondary"
           onClick={() => startServiceOrder(order.id)}
         >
-          Start work
+          Receive & start work
         </Button>
+        </div>
       )}
 
-      {panel ? (
+      {!locked && !reviewing && (panel ? (
         <div className="mt-3 flex flex-col gap-2">
-          {parameters.map((p) => (
-            <div key={p.name} className="flex items-center gap-2">
-              <label className="w-32 shrink-0 text-xs text-zinc-600">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Step 2 · Record findings</p>
+            <p className="text-xs text-zinc-500">
+              {completedFields} of {parameters.length} complete
+            </p>
+          </div>
+          {parameters.map((p) => {
+            const value = values[p.name] ?? "";
+            const numericValue = Number(value);
+            const isNumeric = p.refLow != null || p.refHigh != null;
+            const low = value.trim() !== "" && Number.isFinite(numericValue) && p.refLow != null && numericValue < p.refLow;
+            const high = value.trim() !== "" && Number.isFinite(numericValue) && p.refHigh != null && numericValue > p.refHigh;
+            return (
+            <div key={p.name} className="rounded-lg border border-zinc-200 p-3">
+              <div className="mb-1 flex items-center justify-between gap-2">
+              <label className="text-xs font-medium text-zinc-700">
                 {p.name}
                 {p.unit && (
                   <span className="ml-1 text-zinc-400">({p.unit})</span>
                 )}
               </label>
+              {(p.refLow != null || p.refHigh != null) && (
+                <span className="text-[11px] tabular-nums text-zinc-500">
+                  Normal: {p.refLow ?? "—"}–{p.refHigh ?? "—"} {p.unit}
+                </span>
+              )}
+              </div>
               <input
-                className={`${inputClass} flex-1`}
-                value={values[p.name] ?? ""}
+                className={`${inputClass} w-full ${low || high ? "border-red-400 bg-red-50" : ""}`}
+                type={isNumeric ? "number" : "text"}
+                step={isNumeric ? "any" : undefined}
+                list={isNumeric ? undefined : `results-${order.id}`}
+                placeholder={isNumeric ? "Enter measured value" : "e.g. Positive, Negative or finding"}
+                value={value}
                 disabled={locked}
                 onChange={(e) =>
                   setValues((v) => ({ ...v, [p.name]: e.target.value }))
                 }
               />
-              {(p.refLow != null || p.refHigh != null) && (
-                <span className="w-20 shrink-0 text-right text-[11px] tabular-nums text-zinc-400">
-                  {p.refLow ?? ""}–{p.refHigh ?? ""}
-                </span>
+              {(low || high) && (
+                <p className="mt-1 text-xs font-medium text-red-700">
+                  Outside the configured normal range ({low ? "low" : "high"})
+                </p>
               )}
             </div>
-          ))}
+          )})}
+          <datalist id={`results-${order.id}`}>
+            <option value="Negative" />
+            <option value="Positive" />
+            <option value="Normal" />
+            <option value="Abnormal" />
+          </datalist>
           <textarea
             className={`${inputClass} h-14 w-full py-2`}
             placeholder="Comment (optional)…"
@@ -186,17 +231,29 @@ function ResultCard({
           disabled={locked}
           onChange={(e) => setFreeText(e.target.value)}
         />
-      )}
+      ))}
 
-      <Button
+      {!locked && !reviewing && <Button
         className="mt-3 w-full"
-        disabled={locked || !filled || busy}
-        onClick={file}
+        disabled={!filled}
+        onClick={() => setReviewing(true)}
       >
-        {locked
-          ? "Start work before saving result"
-          : "Save result & return to doctor"}
-      </Button>
+        {filled ? "Review findings" : panel ? "Complete every result" : "Enter findings"}
+      </Button>}
+
+      {reviewing && (
+        <div className="mt-3 rounded-xl border border-teal-200 bg-teal-50 p-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-teal-700">Step 3 · Review & return</p>
+          <p className="mt-1 text-sm text-teal-950">Check these findings carefully. Confirming completes the order and returns the patient to the doctor when all requested services are done.</p>
+          {panel && <ul className="mt-3 space-y-1 text-sm">{parameters.map((p) => <li key={p.name} className="flex justify-between gap-3"><span>{p.name}</span><strong>{values[p.name]} {p.unit}</strong></li>)}</ul>}
+          {!panel && <p className="mt-3 rounded-lg bg-white p-3 text-sm">{freeText}</p>}
+          {freeText && panel && <p className="mt-3 text-sm text-teal-900">Comment: {freeText}</p>}
+          <div className="mt-4 flex gap-2">
+            <Button variant="secondary" className="flex-1" disabled={busy} onClick={() => setReviewing(false)}>Back to edit</Button>
+            <Button className="flex-1" disabled={busy} onClick={file}>{busy ? "Saving…" : "Confirm & return"}</Button>
+          </div>
+        </div>
+      )}
     </Card>
   );
 }

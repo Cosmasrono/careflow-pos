@@ -5,6 +5,7 @@ import { PrinterIcon } from "lucide-react";
 import { checkoutVisit, dispenseAndClose, useClinic } from "@/lib/store";
 import type {
   ID,
+  Med,
   Medicine,
   Order,
   PaymentMethod,
@@ -50,6 +51,8 @@ interface Receipt {
   total: number;
   method: PaymentMethod;
   reference: string;
+  cashReceived?: number;
+  change?: number;
   at: Date;
 }
 
@@ -117,6 +120,7 @@ function PosCard({
   const [cart, setCart] = useState<Map<ID, number>>(new Map()); // medicineId → qty
   const [method, setMethod] = useState<PaymentMethod>("cash");
   const [reference, setReference] = useState("");
+  const [cashReceived, setCashReceived] = useState("");
   const [phone, setPhone] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -159,6 +163,13 @@ function PosCard({
   const inStock = cartLines.every((l) => l.qty <= l.med.stock);
   const stkFlow = method === "mpesa" && stkEnabled;
   const needsReference = method !== "cash" && !stkFlow;
+  const cashAmount = Number(cashReceived);
+  const cashValid =
+    method !== "cash" ||
+    (cashReceived.trim() !== "" &&
+      Number.isFinite(cashAmount) &&
+      cashAmount >= total);
+  const change = method === "cash" && cashValid ? cashAmount - total : 0;
   // A patient who was never prescribed anything still has to settle their
   // bill, so an empty cart is fine as long as something is outstanding.
   const hasSomethingToSettle = cartLines.length > 0 || owed.length > 0;
@@ -169,6 +180,7 @@ function PosCard({
   const ready =
     hasSomethingToSettle &&
     inStock &&
+    cashValid &&
     (!needsReference || reference.trim() !== "");
 
   const checkout = async (serverReference?: string, shownReference?: string) => {
@@ -205,6 +217,8 @@ function PosCard({
       total,
       method,
       reference: shownReference ?? serverReference ?? reference.trim(),
+      cashReceived: method === "cash" ? cashAmount : undefined,
+      change: method === "cash" ? change : undefined,
       at: new Date(),
     });
   };
@@ -267,13 +281,24 @@ function PosCard({
           {prescribed.length === 0 ? (
             <p className="text-sm text-zinc-500">No prescription lines.</p>
           ) : (
-            <ul className="flex flex-col gap-1 text-sm text-zinc-700">
-              {prescribed.map((m) => (
-                <li key={m.id} className="rounded-lg bg-zinc-50 px-3 py-2">
-                  <strong>{m.name}</strong> — {m.dosage}, {m.frequency},{" "}
-                  {m.duration}
+            <ul className="flex flex-col gap-2 text-sm text-zinc-700">
+              {prescribed.map((m: Med) => {
+                const stockItem = m.medicineId ? catalog.get(m.medicineId) : undefined;
+                const alreadyAdded = stockItem ? cart.has(stockItem.id) : false;
+                return (
+                <li key={m.id} className="rounded-xl border border-zinc-200 bg-white p-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <span><strong>{m.name}</strong><span className="mt-1 block text-xs text-zinc-500">{m.dosage} · {m.frequency} · {m.duration}</span></span>
+                    {stockItem ? (
+                      <Button size="sm" variant="secondary" disabled={stockItem.stock <= 0 || alreadyAdded} onClick={() => addToCart(stockItem)}>
+                        {stockItem.stock <= 0 ? "Out of stock" : alreadyAdded ? "Added" : "Add to cart"}
+                      </Button>
+                    ) : (
+                      <span className="rounded-full bg-amber-50 px-2 py-1 text-xs text-amber-700">Legacy · search shelf</span>
+                    )}
+                  </div>
                 </li>
-              ))}
+              )})}
             </ul>
           )}
 
@@ -426,6 +451,7 @@ function PosCard({
                 value={method}
                 onChange={(e) => {
                   setMethod(e.target.value as PaymentMethod);
+                  setCashReceived("");
                   resetStk();
                   setError(null);
                 }}
@@ -437,7 +463,20 @@ function PosCard({
                 ))}
               </select>
             </Field>
-            {stkFlow ? (
+            {method === "cash" ? (
+              <Field label="Cash received (KSh)">
+                <input
+                  className={inputClass}
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  inputMode="decimal"
+                  placeholder={`At least ${total.toLocaleString("en-KE")}`}
+                  value={cashReceived}
+                  onChange={(e) => setCashReceived(e.target.value)}
+                />
+              </Field>
+            ) : stkFlow ? (
               <Field label="Customer phone (Safaricom)">
                 <input
                   className={inputClass}
@@ -466,6 +505,22 @@ function PosCard({
               </Field>
             )}
           </div>
+
+          {method === "cash" && cashReceived.trim() !== "" && (
+            cashValid ? (
+              <div className="mt-3 flex items-center justify-between rounded-lg bg-teal-50 p-3 text-sm text-teal-900">
+                <span>Change to return</span>
+                <strong className="tabular-nums">{money(change)}</strong>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center justify-between rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                <span>Cash is short by</span>
+                <strong className="tabular-nums">
+                  {money(Math.max(0, total - (Number.isFinite(cashAmount) ? cashAmount : 0)))}
+                </strong>
+              </div>
+            )
+          )}
 
           {shownError && (
             <p className="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
@@ -543,7 +598,13 @@ function PosCard({
                   ? "Not enough stock for the cart"
                   : needsReference && !reference.trim()
                     ? "Enter the payment reference"
-                    : `Take ${money(total)} & close visit`}
+                    : method === "cash" && !cashReceived.trim()
+                      ? "Enter cash received"
+                      : method === "cash" && !cashValid
+                        ? "Cash received is not enough"
+                    : method === "cash" && cashValid && change > 0
+                      ? `Take cash · return ${money(change)}`
+                      : `Take ${money(total)} & close visit`}
             </Button>
           )}
         </div>
@@ -602,6 +663,18 @@ function ReceiptCard({
             <span>Total paid</span>
             <span>{money(receipt.total)}</span>
           </li>
+          {receipt.method === "cash" && receipt.cashReceived !== undefined && (
+            <>
+              <li className="flex justify-between text-sm">
+                <span>Cash received</span>
+                <span>{money(receipt.cashReceived)}</span>
+              </li>
+              <li className="flex justify-between text-sm font-semibold">
+                <span>Change returned</span>
+                <span>{money(receipt.change ?? 0)}</span>
+              </li>
+            </>
+          )}
         </ul>
       </Card>
     </div>

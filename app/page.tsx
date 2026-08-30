@@ -4,6 +4,10 @@
 import Image from "next/image";
 import Link from "next/link";
 import { BrandLogo } from "@/components/BrandLogo";
+import { DemoVideo } from "@/components/DemoVideo";
+
+// The walkthrough that plays in the "See CareFlow in action" section.
+const DEMO_VIDEO_ID = "Z0E-YOhU7tE";
 
 const SERVICES = [
   {
@@ -70,6 +74,9 @@ export default function LandingPage() {
             <a href="#services" className="transition-colors hover:text-teal-700">
               Services
             </a>
+            <a href="#demo" className="transition-colors hover:text-teal-700">
+              Demo
+            </a>
             <a href="#visit" className="transition-colors hover:text-teal-700">
               Your visit
             </a>
@@ -114,10 +121,18 @@ export default function LandingPage() {
                 Explore our services
               </a>
               <a
-                href="#contact"
-                className="inline-flex h-11 items-center rounded-full border border-zinc-200 bg-white px-6 text-sm font-medium text-zinc-800 shadow-sm transition-colors hover:border-teal-700/30 hover:bg-teal-50/60 hover:text-teal-900"
+                href="#demo"
+                className="inline-flex h-11 items-center gap-2 rounded-full border border-zinc-200 bg-white px-6 text-sm font-medium text-zinc-800 shadow-sm transition-colors hover:border-teal-700/30 hover:bg-teal-50/60 hover:text-teal-900"
               >
-                Contact us
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="currentColor"
+                  aria-hidden
+                  className="h-4 w-4 text-teal-700"
+                >
+                  <path d="M8 5.14v13.72a1 1 0 0 0 1.52.85l11.14-6.86a1 1 0 0 0 0-1.7L9.52 4.29A1 1 0 0 0 8 5.14Z" />
+                </svg>
+                Watch the demo
               </a>
             </div>
             <dl className="mt-10 grid max-w-md grid-cols-3 gap-4 text-center">
@@ -159,6 +174,30 @@ export default function LandingPage() {
               />
             </div>
           </div>
+        </div>
+      </section>
+
+      {/* Demo video */}
+      <section id="demo" className="border-t border-teal-950/5 bg-white">
+        <div className="mx-auto grid max-w-6xl items-center gap-8 px-4 py-12 sm:px-6 lg:grid-cols-[1fr_1.4fr]">
+          <div>
+            <p className="inline-flex items-center gap-2 rounded-full bg-teal-50 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-teal-800 ring-1 ring-inset ring-teal-600/20">
+              <span className="h-1.5 w-1.5 rounded-full bg-teal-600" />
+              Walkthrough
+            </p>
+            <h2 className="mt-4 font-display text-3xl font-semibold tracking-tight text-teal-950 sm:text-4xl">
+              See CareFlow in action
+            </h2>
+            <p className="mt-3 max-w-md text-sm leading-6 text-zinc-600">
+              A short tour of one patient visit as the clinic sees it — from the
+              reception desk, through the doctor and the lab, to the pharmacy
+              handing over medication on the same record.
+            </p>
+          </div>
+          <DemoVideo
+            videoId={DEMO_VIDEO_ID}
+            title="CareFlow clinic walkthrough"
+          />
         </div>
       </section>
 

@@ -248,7 +248,7 @@ function PosCard({
   const requestStk = () =>
     void request({
       phone,
-      accountReference: mrn || "CareFlow",
+      accountReference: mrn || "CarePharm",
       // The server re-prices the cart and adds whatever the visit still owes,
       // so the pushed amount always matches what checkout expects.
       visitId: visit.id,
@@ -629,7 +629,7 @@ function ReceiptCard({
         <div className="flex items-start justify-between">
           <div>
             <p className="hidden text-center text-lg font-bold text-zinc-900 print:block">
-              CareFlow Clinic
+              CarePharm Clinic
             </p>
             <h2 className="text-sm font-semibold text-teal-900 print:mt-2 print:text-zinc-900">
               Payment received — visit closed

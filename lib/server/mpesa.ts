@@ -83,7 +83,7 @@ export async function stkPush(input: {
       channel_id: channel,
       provider: "m-pesa",
       external_reference: externalReference,
-      customer_name: input.accountReference || "CareFlow",
+      customer_name: input.accountReference || "CarePharm",
       callback_url: callbackUrl(),
     }),
     cache: "no-store",

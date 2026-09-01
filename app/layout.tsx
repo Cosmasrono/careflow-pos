@@ -25,7 +25,7 @@ const fraunces = Fraunces({
 });
 
 export const metadata: Metadata = {
-  title: "CareFlow — Clinic Management",
+  title: "CarePharm — Clinic Management",
   description: "Patient flow from reception to pharmacy",
 };
 

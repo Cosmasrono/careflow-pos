@@ -85,7 +85,7 @@ export function AppShell({ children }: { children: ReactNode }) {
           <BrandMark />
           <div>
             <p className="font-display text-base font-semibold leading-tight text-white">
-              CareFlow
+              CarePharm
             </p>
             <p className="text-xs text-teal-300/80">Clinic Management</p>
           </div>
@@ -128,7 +128,7 @@ export function AppShell({ children }: { children: ReactNode }) {
         <header className="flex items-center justify-between bg-teal-950 px-4 py-2.5 text-white sm:hidden print:!hidden">
           <div className="flex items-center gap-2">
             <BrandMark size="sm" />
-            <span className="font-display font-semibold">CareFlow</span>
+            <span className="font-display font-semibold">CarePharm</span>
           </div>
           <button
             type="button"

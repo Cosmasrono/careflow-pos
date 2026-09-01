@@ -703,7 +703,7 @@ function PaymentCard({
   const requestStk = () =>
     void request({
       phone,
-      accountReference: mrn || "CareFlow",
+      accountReference: mrn || "CarePharm",
       // The server prices these charges itself, so the pushed amount always
       // matches what payCharges will settle.
       visitId: visit.id,

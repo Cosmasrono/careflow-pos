@@ -107,7 +107,7 @@ export function AiAssistant() {
           <header className="flex items-center gap-2.5 bg-linear-to-r from-teal-950 to-teal-900 px-4 py-3 text-white">
             <SparklesIcon className="size-4 text-teal-300" />
             <div>
-              <p className="text-sm font-semibold leading-tight">CareFlow Assistant</p>
+              <p className="text-sm font-semibold leading-tight">CarePharm Assistant</p>
               <p className="text-[11px] text-teal-300/80">
                 Answers from live clinic data
               </p>

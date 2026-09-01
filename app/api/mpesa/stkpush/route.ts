@@ -107,7 +107,7 @@ export async function POST(req: Request) {
     const push = await stkPush({
       phone,
       amount,
-      accountReference: body.accountReference ?? "CareFlow",
+      accountReference: body.accountReference ?? "CarePharm",
       description: items.length > 0 ? "Pharmacy" : "Clinic fees",
     });
     if (!push.ok || !push.checkoutRequestId) {

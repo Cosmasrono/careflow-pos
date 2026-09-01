@@ -21,7 +21,7 @@ export function AuthCard({ children }: { children: React.ReactNode }) {
           <BrandLogo size="lg" />
           <div>
             <p className="font-display text-base font-semibold leading-tight text-teal-950">
-              CareFlow
+              CarePharm
             </p>
             <p className="text-xs text-zinc-500">Clinic Management</p>
           </div>
@@ -30,7 +30,7 @@ export function AuthCard({ children }: { children: React.ReactNode }) {
         {children}
 
         <p className="mt-6 text-center text-xs text-zinc-400">
-          Staff access only · CareFlow Clinic &amp; Diagnostics
+          Staff access only · CarePharm Clinic &amp; Diagnostics
         </p>
       </div>
     </div>

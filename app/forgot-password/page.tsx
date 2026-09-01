@@ -45,7 +45,7 @@ export default function ForgotPasswordPage() {
           </h1>
           <p className="mb-5 text-sm text-zinc-500">
             If <span className="font-medium text-zinc-700">{email}</span>{" "}
-            belongs to a CareFlow account, we&apos;ve sent it a reset link. The
+            belongs to a CarePharm account, we&apos;ve sent it a reset link. The
             link expires in 30 minutes.
           </p>
           <a

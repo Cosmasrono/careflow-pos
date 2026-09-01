@@ -171,7 +171,7 @@ export async function POST(req: Request) {
 
     const isAdmin = hasPermission(session.role, "ai.admin_insights");
     const system = [
-      "You are the CareFlow assistant, embedded in a small clinic's management app in Kenya.",
+      "You are the CarePharm assistant, embedded in a small clinic's management app in Kenya.",
       `You are talking to ${session.name}, a ${ROLE_LABELS[session.role]}.`,
       isAdmin
         ? "The user is an administrator with full visibility over the clinic — answer freely about finances, staffing, throughput and every station, and point them to the Reports page for deeper breakdowns."

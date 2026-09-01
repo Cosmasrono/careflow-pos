@@ -26,18 +26,18 @@ export async function sendPasswordResetEmail(opts: {
   name: string;
   link: string;
 }): Promise<void> {
-  const from = `"${process.env.MAIL_FROM_NAME ?? "CareFlow"}" <${
+  const from = `"${process.env.MAIL_FROM_NAME ?? "CarePharm"}" <${
     process.env.MAIL_FROM_ADDRESS ?? process.env.MAIL_USERNAME
   }>`;
 
   await transporter().sendMail({
     from,
     to: opts.to,
-    subject: "Reset your CareFlow password",
+    subject: "Reset your CarePharm password",
     text: [
       `Hi ${opts.name},`,
       "",
-      "Someone (hopefully you) asked to reset your CareFlow password.",
+      "Someone (hopefully you) asked to reset your CarePharm password.",
       "Open the link below to choose a new one. It expires in 30 minutes",
       "and can only be used once.",
       "",
@@ -47,10 +47,10 @@ export async function sendPasswordResetEmail(opts: {
     ].join("\n"),
     html: `
       <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px">
-        <h2 style="color:#134e4a;margin:0 0 12px">Reset your CareFlow password</h2>
+        <h2 style="color:#134e4a;margin:0 0 12px">Reset your CarePharm password</h2>
         <p style="color:#3f3f46;line-height:1.6">Hi ${opts.name},</p>
         <p style="color:#3f3f46;line-height:1.6">
-          Someone (hopefully you) asked to reset your CareFlow password.
+          Someone (hopefully you) asked to reset your CarePharm password.
           Click the button below to choose a new one. The link expires in
           <strong>30 minutes</strong> and can only be used once.
         </p>
@@ -76,18 +76,18 @@ export async function sendAccountSetupEmail(opts: {
   name: string;
   link: string;
 }): Promise<void> {
-  const from = `"${process.env.MAIL_FROM_NAME ?? "CareFlow"}" <${
+  const from = `"${process.env.MAIL_FROM_NAME ?? "CarePharm"}" <${
     process.env.MAIL_FROM_ADDRESS ?? process.env.MAIL_USERNAME
   }>`;
 
   await transporter().sendMail({
     from,
     to: opts.to,
-    subject: "Set up your CareFlow account password",
+    subject: "Set up your CarePharm account password",
     text: [
       `Hi ${opts.name},`,
       "",
-      "An account has been created for you on CareFlow.",
+      "An account has been created for you on CarePharm.",
       "Open the link below to choose your password.",
       "The link expires in 30 minutes and can only be used once.",
       "",
@@ -97,10 +97,10 @@ export async function sendAccountSetupEmail(opts: {
     ].join("\n"),
     html: `
       <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px">
-        <h2 style="color:#134e4a;margin:0 0 12px">Set up your CareFlow password</h2>
+        <h2 style="color:#134e4a;margin:0 0 12px">Set up your CarePharm password</h2>
         <p style="color:#3f3f46;line-height:1.6">Hi ${opts.name},</p>
         <p style="color:#3f3f46;line-height:1.6">
-          An account has been created for you on CareFlow. Click the button below
+          An account has been created for you on CarePharm. Click the button below
           to choose your password. The link expires in <strong>30 minutes</strong>
           and can only be used once.
         </p>
@@ -128,18 +128,18 @@ export async function sendCredentialsEmail(opts: {
   password: string;
   setupLink: string;
 }): Promise<void> {
-  const from = `"${process.env.MAIL_FROM_NAME ?? "CareFlow"}" <${
+  const from = `"${process.env.MAIL_FROM_NAME ?? "CarePharm"}" <${
     process.env.MAIL_FROM_ADDRESS ?? process.env.MAIL_USERNAME
   }>`;
 
   await transporter().sendMail({
     from,
     to: opts.to,
-    subject: "Your CareFlow account — choose your password",
+    subject: "Your CarePharm account — choose your password",
     text: [
       `Hi ${opts.name},`,
       "",
-      "An account has been created for you on CareFlow.",
+      "An account has been created for you on CarePharm.",
       "Open the link below to choose a password you'll remember:",
       "",
       opts.setupLink,
@@ -156,7 +156,7 @@ export async function sendCredentialsEmail(opts: {
     ].join("\n"),
     html: `
       <div style="font-family:system-ui,-apple-system,Segoe UI,sans-serif;max-width:480px;margin:0 auto;padding:24px">
-        <h2 style="color:#134e4a;margin:0 0 12px">Welcome to CareFlow</h2>
+        <h2 style="color:#134e4a;margin:0 0 12px">Welcome to CarePharm</h2>
         <p style="color:#3f3f46;line-height:1.6">Hi ${opts.name},</p>
         <p style="color:#3f3f46;line-height:1.6">
           An account has been created for you. Click below to choose a password

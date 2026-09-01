@@ -13,7 +13,7 @@ export function RouteLoadingOverlay() {
         <div className="flex items-center gap-3">
           <BrandLogo size="lg" />
           <div>
-            <p className="font-display text-lg font-semibold">CareFlow</p>
+            <p className="font-display text-lg font-semibold">CarePharm</p>
             <p className="text-xs text-teal-100/80">
               Preparing your workspace...
             </p>

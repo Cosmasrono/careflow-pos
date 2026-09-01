@@ -162,7 +162,7 @@ export default function AccountingPage() {
       {/* Letterhead shown only on the printed report */}
       <div className="mb-5 hidden border-b border-zinc-300 pb-4 print:block">
         <h1 className="text-xl font-semibold text-zinc-900">
-          CareFlow Clinic — Profit &amp; Loss Report
+          CarePharm Clinic — Profit &amp; Loss Report
         </h1>
         <p className="mt-1 text-sm text-zinc-600">
           Period: {periodLabel} · Printed{" "}

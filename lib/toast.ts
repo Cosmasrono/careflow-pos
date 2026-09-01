@@ -7,7 +7,7 @@ export type ToastPayload = {
   message: string;
 };
 
-export const TOAST_EVENT = "careflow:toast";
+export const TOAST_EVENT = "carepham:toast";
 
 export function notify(kind: ToastKind, message: string) {
   if (typeof window === "undefined") return;

@@ -142,17 +142,25 @@ export async function POST(req: Request) {
     );
   }
 
+  const isAutoApproved = session.role === "admin" || hasPermission(session.role, "activity.review");
+
   await prisma.activityRequest.create({
     data: {
       userId: session.id,
       userName: session.name,
       userRole: session.role,
       reason,
-      status: "pending",
+      status: isAutoApproved ? "approved" : "pending",
+      decidedById: isAutoApproved ? session.id : undefined,
+      decidedBy: isAutoApproved ? "Auto-approved (Owner / Admin)" : undefined,
+      decidedAt: isAutoApproved ? new Date() : undefined,
       ...data,
     },
   });
-  return NextResponse.json({ requests: await listFor(session) });
+  return NextResponse.json({
+    requests: await listFor(session),
+    autoApproved: isAutoApproved,
+  });
 }
 
 export async function PATCH(req: Request) {

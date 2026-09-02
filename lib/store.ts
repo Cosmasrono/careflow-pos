@@ -74,6 +74,7 @@ const ACTION_SUCCESS_MESSAGES: Record<string, string> = {
   payCharges: "Payment recorded.",
   addMedicine: "Medicine added to catalog.",
   updateMedicine: "Medicine updated.",
+  importMedicines: "Bulk inventory import completed.",
   addServiceItem: "Service added to catalog.",
   updateServiceItem: "Service updated.",
   addExpense: "Expense recorded.",
@@ -280,9 +281,32 @@ export async function addMedicine(input: {
  *  on rejection, else null. */
 export async function updateMedicine(
   id: ID,
-  changes: { unitPrice?: number; costPrice?: number; stock?: number },
+  changes: {
+    name?: string;
+    strength?: string;
+    form?: string;
+    unitPrice?: number;
+    costPrice?: number;
+    stock?: number;
+  },
 ) {
   const { error } = await act("updateMedicine", { id, ...changes });
+  return error;
+}
+
+/** Bulk import an array of medicines parsed from Excel/CSV. */
+export async function importMedicines(input: {
+  items: {
+    name: string;
+    strength?: string;
+    form: string;
+    unitPrice: number;
+    costPrice?: number;
+    stock: number;
+  }[];
+  mode?: "add_or_update" | "add_only" | "restock_only";
+}) {
+  const { error } = await act("importMedicines", input);
   return error;
 }
 

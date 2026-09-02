@@ -818,11 +818,35 @@ export async function addMedicine(input: {
 
 export async function updateMedicine(input: {
   id: ID;
+  name?: string;
+  strength?: string;
+  form?: string;
   unitPrice?: number;
   costPrice?: number;
   stock?: number;
 }): Promise<{ error: string } | void> {
-  const data: { unitPrice?: number; costPrice?: number; stock?: number } = {};
+  const data: {
+    name?: string;
+    strength?: string;
+    form?: string;
+    unitPrice?: number;
+    costPrice?: number;
+    stock?: number;
+  } = {};
+
+  if (input.name !== undefined) {
+    const name = input.name.trim();
+    if (!name) return { error: "Name cannot be blank." };
+    data.name = name;
+  }
+  if (input.strength !== undefined) {
+    data.strength = input.strength.trim();
+  }
+  if (input.form !== undefined) {
+    const form = input.form.trim();
+    if (!form) return { error: "Form cannot be blank." };
+    data.form = form;
+  }
   if (input.unitPrice !== undefined) {
     const unitPrice = Number(input.unitPrice);
     if (!Number.isFinite(unitPrice) || unitPrice < 0) {
@@ -846,6 +870,71 @@ export async function updateMedicine(input: {
   }
   if (Object.keys(data).length === 0) return;
   await prisma.medicine.update({ where: { id: input.id }, data });
+}
+
+export async function importMedicines(input: {
+  items: {
+    name: string;
+    strength?: string;
+    form: string;
+    unitPrice: number;
+    costPrice?: number;
+    stock: number;
+  }[];
+  mode?: "add_or_update" | "add_only" | "restock_only";
+}): Promise<{ added: number; updated: number; error?: string }> {
+  if (!Array.isArray(input.items) || input.items.length === 0) {
+    return { added: 0, updated: 0, error: "No items provided in import list." };
+  }
+
+  let added = 0;
+  let updated = 0;
+  const mode = input.mode ?? "add_or_update";
+
+  for (const item of input.items) {
+    const name = item.name?.trim();
+    if (!name) continue;
+    const strength = item.strength?.trim() ?? "";
+    const form = item.form?.trim() || "tablet";
+    const unitPrice = Math.max(0, Number(item.unitPrice) || 0);
+    const costPrice = Math.max(0, Number(item.costPrice) || 0);
+    const stockQty = Math.max(0, Math.round(Number(item.stock) || 0));
+
+    const existing = await prisma.medicine.findFirst({
+      where: {
+        name: { equals: name, mode: "insensitive" },
+        strength: { equals: strength, mode: "insensitive" },
+      },
+    });
+
+    if (existing) {
+      if (mode === "add_only") continue;
+      await prisma.medicine.update({
+        where: { id: existing.id },
+        data: {
+          stock: existing.stock + stockQty,
+          unitPrice: unitPrice > 0 ? unitPrice : existing.unitPrice,
+          costPrice: costPrice > 0 ? costPrice : existing.costPrice,
+        },
+      });
+      updated++;
+    } else {
+      if (mode === "restock_only") continue;
+      await prisma.medicine.create({
+        data: {
+          name,
+          strength,
+          form,
+          unitPrice,
+          costPrice,
+          stock: stockQty,
+        },
+      });
+      added++;
+    }
+  }
+
+  return { added, updated };
 }
 
 export async function startConsult(input: { visitId: ID }) {

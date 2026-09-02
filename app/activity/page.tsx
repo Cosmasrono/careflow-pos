@@ -386,6 +386,7 @@ function RequestForm({
       });
       const body = (await res.json()) as {
         requests?: ActivityRequest[];
+        autoApproved?: boolean;
         error?: string;
       };
       if (!res.ok || !body.requests) {
@@ -396,7 +397,11 @@ function RequestForm({
       }
       onCreated(body.requests);
       setForm(emptyForm);
-      notify("success", "Request sent to the admin for approval.");
+      if (body.autoApproved) {
+        notify("success", "Leave/excuse submitted and auto-approved.");
+      } else {
+        notify("success", "Request sent to the admin for approval.");
+      }
     } catch {
       setError("Network error — please try again.");
     } finally {

@@ -206,18 +206,7 @@ export default function LandingPage() {
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:py-20">
           {/* Left copy */}
           <div>
-            {/* Open badge */}
-            <div className="inline-flex items-center gap-2 rounded-full border border-teal-200 bg-teal-50 px-3 py-1.5">
-              <span className="relative flex h-2 w-2">
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-teal-500 opacity-75" />
-                <span className="relative inline-flex h-2 w-2 rounded-full bg-teal-600" />
-              </span>
-              <span className="text-xs font-semibold text-teal-700">
-                Open 7 days a week · Walk-ins welcome
-              </span>
-            </div>
-
-            <h1 className="mt-5 font-display text-4xl font-semibold tracking-tight text-teal-950 sm:text-[3.25rem] sm:leading-[1.07]">
+            <h1 className="font-display text-4xl font-semibold tracking-tight text-teal-950 sm:text-[3.25rem] sm:leading-[1.07]">
               Your health, handled{" "}
               <span className="relative whitespace-nowrap">
                 <span className="relative z-10 text-teal-700">
